@@ -1,0 +1,205 @@
+[project]
+name = "deepsearcher"
+version = "0.0.2"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "argparse>=1.4.0",
+    "fastapi>=0.115.12",
+    "firecrawl-py>=2.5.3",
+    "ibm-watsonx-ai>=1.3.0",
+    "langchain-text-splitters>=0.3.8",
+    "numpy>=1.26.4",
+    "openai>=1.77.0",
+    "pdfplumber>=0.11.6",
+    "pymilvus>=2.5.8",
+    "requests>=2.32.3",
+    "termcolor>=3.1.0",
+    "tqdm>=4.67.1",
+    "uvicorn>=0.34.2",
+]
+description = "None"
+license = { file = "LICENSE"}
+authors = [
+    { name = "Cheney Zhang", email = "277584121@qq.com" },
+    { name = "SimFG", email = "bang.fu@zilliz.com" }
+]
+
+[project.urls]
+Homepage = "https://github.com/zilliztech/deep-searcher"
+
+[project.scripts]
+deepsearcher = "deepsearcher.cli:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.9",
+    "mkdocs-material>=9.5.40",
+    "mkdocs-jupyter>=0.25.0",
+    "mkdocs-click>=0.8.1",
+    "mkdocstrings[python]>=0.27.0",
+    "pytest>=8.3.5",
+]
+
+[project.optional-dependencies]
+all = [
+    "voyageai>=0.3.2",
+    "anthropic>=0.51.0",
+    "google-genai>=1.14.0",
+    "ollama>=0.4.8",
+    "unstructured-ingest>=1.0.24",
+    "unstructured[all-docs]>=0.17.2",
+    "zhipuai>=2.1.5.20250421",
+    "oracledb>=3.1.0",
+    "azure-search-documents>=11.5.2",
+    "boto3>=1.38.11",
+    "together>=1.3.14",
+    "fastembed>=0.6.1",
+    "qdrant-client>=1.14.2",
+    "docling>=2.15.1",
+    "docling-core>=2.30.0",
+    "crawl4ai>=0.6.2",
+    "sentence-transformers>=4.1.0",
+    "ibm-watsonx-ai>=1.3.0"
+]
+
+voyageai = [
+    "voyageai>=0.3.2",
+]
+anthropic = [
+    "anthropic>=0.51.0",
+]
+google = [
+    "google-genai>=1.14.0",
+]
+ollama = [
+    "ollama>=0.4.8",
+]
+unstructured = [
+    "unstructured-ingest>=1.0.24",
+    "unstructured[all-docs]>=0.17.2",
+]
+zhipuai = [
+    "zhipuai>=2.1.5.20250421",
+]
+oracledb = [
+    "oracledb>=3.1.0",
+]
+azure-search = [
+    "azure-search-documents>=11.5.2",
+]
+boto3 = [
+    "boto3>=1.38.11",
+]
+together = [
+    "together>=1.3.14",
+]
+qdrant = [
+    "fastembed>=0.6.1",
+    "qdrant-client>=1.14.2",
+]
+docling = [
+    "docling>=2.15.1",
+    "docling-core>=2.30.0",
+]
+crawl4ai = [
+    "crawl4ai>=0.6.2",
+]
+
+sentence-transformers = [
+    "sentence-transformers>=4.1.0",
+]
+
+ibm-watsonx = [
+    "ibm-watsonx-ai>=1.3.0"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+    "tests",
+    "examples",
+]
+
+# Same as Black.
+line-length = 100
+indent-width = 4
+
+# Assume Python 3.10
+target-version = "py310"
+
+show-fixes = true
+
+[tool.ruff.lint]
+# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
+# Enable isort (`I`)
+select = ["E4", "E7", "E9", "F", "I"]
+ignore = []
+
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+# Enable auto-formatting of code examples in docstrings. Markdown,
+# reStructuredText code/literal blocks and doctests are all supported.
+#
+# This is currently disabled by default, but it is planned for this
+# to be opt-out in the future.
+docstring-code-format = false
+
+# Set the line length limit used when formatting code snippets in
+# docstrings.
+#
+# This only has an effect when the `docstring-code-format` setting is
+# enabled.
+docstring-code-line-length = "dynamic"

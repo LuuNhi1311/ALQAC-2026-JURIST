@@ -1,0 +1,119 @@
+provide_settings:
+  llm:
+    provider: "OpenAI"
+    config:
+      model: "o1-mini"
+#      api_key: "sk-xxxx"  # Uncomment to override the `OPENAI_API_KEY` set in the environment variable
+#      base_url: ""
+
+#    provider: "DeepSeek"
+#    config:
+#      model: "deepseek-reasoner"
+##      api_key: "sk-xxxx"  # Uncomment to override the `DEEPSEEK_API_KEY` set in the environment variable
+##      base_url: ""
+
+#    provider: "SiliconFlow"
+#    config:
+#      model: "deepseek-ai/DeepSeek-R1"
+##      api_key: "xxxx"  # Uncomment to override the `SILICONFLOW_API_KEY` set in the environment variable
+##      base_url: ""
+
+#    provider: "PPIO"
+#    config:
+#      model: "deepseek/deepseek-r1-turbo"
+##      api_key: "xxxx"  # Uncomment to override the `PPIO_API_KEY` set in the environment variable
+##      base_url: ""
+
+#    provider: "TogetherAI"
+#    config:
+#      model: "deepseek-ai/DeepSeek-R1"
+##      api_key: "xxxx"  # Uncomment to override the `TOGETHER_API_KEY` set in the environment variable
+
+#    provider: "AzureOpenAI"
+#    config:
+#      model: ""
+#      api_version: ""
+##      azure_endpoint: "xxxx"  # Uncomment to override the `AZURE_OPENAI_ENDPOINT` set in the environment variable
+##      api_key: "xxxx"  # Uncomment to override the `AZURE_OPENAI_KEY` set in the environment variable
+
+#    provider: "Ollama"
+#    config:
+#      model: "qwq"
+##      base_url: ""
+
+#    provider: "Novita"
+#    config:
+#      model: "deepseek/deepseek-v3-0324"
+##      api_key: "xxxx"  # Uncomment to override the `NOVITA_API_KEY` set in the environment variable
+##      base_url: ""
+
+  embedding:
+    provider: "OpenAIEmbedding"
+    config:
+      model: "text-embedding-ada-002"
+#      api_key: ""  # Uncomment to override the `OPENAI_API_KEY` set in the environment variable
+
+
+#    provider: "MilvusEmbedding"
+#    config:
+#      model: "default"
+
+#    provider: "VoyageEmbedding"
+#    config:
+#      model: "voyage-3"
+##      api_key: ""  # Uncomment to override the `VOYAGE_API_KEY` set in the environment variable
+
+#    provider: "BedrockEmbedding"
+#    config:
+#      model: "amazon.titan-embed-text-v2:0"
+##      aws_access_key_id: ""  # Uncomment to override the `AWS_ACCESS_KEY_ID` set in the environment variable
+##      aws_secret_access_key: ""  # Uncomment to override the `AWS_SECRET_ACCESS_KEY` set in the environment variable
+    
+#    provider: "SiliconflowEmbedding"
+#    config:
+#      model: "BAAI/bge-m3"
+# .    api_key: ""   # Uncomment to override the `SILICONFLOW_API_KEY` set in the environment variable   
+
+#    provider: "NovitaEmbedding"
+#    config:
+#      model: "baai/bge-m3"
+# .    api_key: ""   # Uncomment to override the `NOVITA_API_KEY` set in the environment variable   
+
+  file_loader:
+#    provider: "PDFLoader"
+#    config: {}
+
+    provider: "JsonFileLoader"
+    config:
+      text_key: "text"
+
+#    provider: "TextLoader"
+#    config: {}
+
+#    provider: "UnstructuredLoader"
+#    config: {}
+
+  web_crawler:
+    provider: "FireCrawlCrawler"
+    config: {}
+
+#    provider: "Crawl4AICrawler"
+#    config: {}
+
+#    provider: "JinaCrawler"
+#    config: {}
+
+  vector_db:
+    provider: "Milvus"
+    config:
+      default_collection: "deepsearcher"
+      uri: "./milvus.db"
+      token: "root:Milvus"
+      db: "default"
+
+query_settings:
+  max_iter: 3
+
+load_settings:
+  chunk_size: 1500
+  chunk_overlap: 100

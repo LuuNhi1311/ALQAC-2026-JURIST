@@ -1,0 +1,113 @@
+site_name: DeepSearcher
+site_url: https://zilliztech.github.io/deep-searcher/
+repo_name: zilliztech/deep-searcher
+repo_url: https://github.com/zilliztech/deep-searcher
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      scheme: default
+      primary: black
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+
+  logo: assets/pic/logo-badge.png
+  favicon: assets/pic/logo-badge.png
+  features:
+    - content.tabs.link
+    - content.code.annotate
+    - content.code.copy
+    - announce.dismiss
+    - navigation.footer
+    - navigation.tabs
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.path
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - search.suggest
+    - toc.follow
+
+nav:
+  - Home:
+    - "Home": index.md
+    - "Installation": 
+      - "Installation": installation/index.md
+      - "Via Pip": installation/pip.md
+      - "Development Mode": installation/development.md
+    - "FAQ": 
+      - "FAQ": faq/index.md
+  - Contribution Guide:
+    - "Contribution Guide": contributing/index.md
+  - Usage:
+    - "Usage": usage/index.md
+    - "Quick Start": usage/quick_start.md
+    - "Command Line Interface": usage/cli.md
+    - "Deployment": usage/deployment.md
+  - Examples:
+    - "Overview": examples/index.md
+    - "Basic Example": examples/basic_example.md
+    - "Docling Integration": examples/docling.md
+    - "Unstructured Integration": examples/unstructured.md
+    - "FireCrawl Integration": examples/firecrawl.md
+    - "Oracle Example": examples/oracle.md
+  - Configuration:
+    - "Overview": configuration/index.md
+    - "LLM Models": configuration/llm.md
+    - "Embedding Models": configuration/embedding.md
+    - "Vector Database": configuration/vector_db.md
+    - "File Loader": configuration/file_loader.md
+    - "Web Crawler": configuration/web_crawler.md
+  - Modules:
+    - "Module Support": integrations/index.md
+  - Future Plans:
+    - "Future Plans": future_plans.md
+
+markdown_extensions:
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - mkdocs-click
+  - md_in_html
+  - tables
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.highlight
+
+plugins:
+  - search
+  - mkdocs-jupyter
+
+extra_css:
+  - stylesheets/extra.css 

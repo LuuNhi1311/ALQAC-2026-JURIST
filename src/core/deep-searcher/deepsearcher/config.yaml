@@ -1,0 +1,177 @@
+provide_settings:
+  llm:
+    provider: "OpenAI"
+    config:
+      model: "o1-mini"
+#      api_key: "sk-xxxx"  # Uncomment to override the `OPENAI_API_KEY` set in the environment variable
+#      base_url: ""
+
+#    provider: "DeepSeek"
+#    config:
+#      model: "deepseek-reasoner"
+##      api_key: "sk-xxxx"  # Uncomment to override the `DEEPSEEK_API_KEY` set in the environment variable
+##      base_url: ""
+
+#    provider: "SiliconFlow"
+#    config:
+#      model: "deepseek-ai/DeepSeek-R1"
+##      api_key: "xxxx"  # Uncomment to override the `SILICONFLOW_API_KEY` set in the environment variable
+##      base_url: ""
+
+#    provider: "PPIO"
+#    config:
+#      model: "deepseek/deepseek-r1-turbo"
+##      api_key: "sk_xxxxxx"  # Uncomment to override the `PPIO_API_KEY` set in the environment variable
+##      base_url: ""
+
+#    provider: "Jiekou.AI"
+#    config:
+#      model: "claude-sonnet-4-5-20250929"
+##      api_key: "xxxx"  # Uncomment to override the `JIEKOU_API_KEY` set in the environment variable
+##      base_url: ""
+
+#    provider: "TogetherAI"
+#    config:
+#      model: "deepseek-ai/DeepSeek-R1"
+##      api_key: "xxxx"  # Uncomment to override the `TOGETHER_API_KEY` set in the environment variable
+
+#    provider: "AzureOpenAI"
+#    config:
+#      model: ""
+#      api_version: ""
+##      azure_endpoint: "xxxx"  # Uncomment to override the `AZURE_OPENAI_ENDPOINT` set in the environment variable
+##      api_key: "xxxx"  # Uncomment to override the `AZURE_OPENAI_KEY` set in the environment variable
+
+#    provider: "Ollama"
+#    config:
+#      model: "qwq"
+##      base_url: ""
+
+#    provider: "Novita"
+#    config:
+#      model: "deepseek/deepseek-v3-0324"
+##      api_key: "sk_xxxxxx"  # Uncomment to override the `NOVITA_API_KEY` set in the environment variable
+
+  embedding:
+    provider: "OpenAIEmbedding"
+    config:
+      model: "text-embedding-ada-002"
+#      api_key: ""  # Uncomment to override the `OPENAI_API_KEY` set in the environment variable
+#      base_url: "" # Uncomment to override the `OPENAI_BASE_URL` set in the environment variable
+#      dimension: 1536 # Uncomment to customize the embedding dimension 
+
+
+#    provider: "MilvusEmbedding"
+#    config:
+#      model: "default"
+
+#    provider: "VoyageEmbedding"
+#    config:
+#      model: "voyage-3"
+##      api_key: ""  # Uncomment to override the `VOYAGE_API_KEY` set in the environment variable
+
+#    provider: "BedrockEmbedding"
+#    config:
+#      model: "amazon.titan-embed-text-v2:0"
+##      aws_access_key_id: ""  # Uncomment to override the `AWS_ACCESS_KEY_ID` set in the environment variable
+##      aws_secret_access_key: ""  # Uncomment to override the `AWS_SECRET_ACCESS_KEY` set in the environment variable
+    
+#    provider: "SiliconflowEmbedding"
+#    config:
+#      model: "BAAI/bge-m3"
+# .    api_key: ""   # Uncomment to override the `SILICONFLOW_API_KEY` set in the environment variable   
+
+#    provider: "GeminiEmbedding"
+#    config:
+#      model: "text-embedding-004"
+##       api_key: ""  # Uncomment to override the `GEMINI_API_KEY` set in the environment variable
+##       dimension: 768 # Uncomment to customize the embedding dimension 
+
+#    provider: "OllamaEmbedding"
+#    config:
+#      model: "bge-m3"
+##       dimension: 1024 # Uncomment to customize the embedding dimension
+
+#    provider: "FastEmbedEmbedding"
+#    config:
+#      model: "BAAI/bge-small-en-v1.5"
+
+#    provider: "NovitaEmbedding"
+#    config:
+#      model: "baai/bge-m3"
+##      api_key: "sk_xxxxxx"  # Uncomment to override the `NOVITA_API_KEY` set in the environment variable
+
+    # provider: "SentenceTransformerEmbedding"
+    # config:
+    #   model: "BAAI/bge-large-zh-v1.5"
+
+  file_loader:
+    provider: "PDFLoader"
+    config: {}
+
+#    provider: "JsonFileLoader"
+#    config:
+#      text_key: ""
+
+#    provider: "TextLoader"
+#    config: {}
+
+#    provider: "UnstructuredLoader"
+#    config: {}
+
+#    provider: "DoclingLoader"
+#    config: {}
+
+
+  web_crawler:
+    provider: "FireCrawlCrawler"
+    config: {}
+
+    # provider: "Crawl4AICrawler"
+    # config: # Uncomment to custom browser configuration for Crawl4AI
+    #   browser_config:
+    #     headless: false
+    #     proxy: "http://127.0.0.1:7890"
+    #     chrome_channel: "chrome"
+    #     verbose: true
+    #     viewport_width: 800
+    #     viewport_height: 600
+    
+    #    provider: "JinaCrawler"
+    #    config: {}
+
+    #    provider: "DoclingCrawler"
+    #    config: {}
+
+  vector_db:
+    provider: "Milvus"
+    config:
+      default_collection: "deepsearcher"
+      uri: "./milvus.db"
+      token: "root:Milvus"
+      db: "default"
+
+  # vector_db:      
+  #   provider: "OracleDB"
+  #   config:
+  #     default_collection: "deepsearcher"
+  #     user: ""
+  #     password: ""
+  #     dsn: ""
+  #     config_dir: ""
+  #     wallet_location: ""
+  #     wallet_password: ""
+
+  # vector_db:      
+  #   provider: "Qdrant"
+  #   config:
+  #     default_collection: "deepsearcher"
+  #     host: "localhost"
+  #     port: 6333
+
+query_settings:
+  max_iter: 3
+
+load_settings:
+  chunk_size: 1500
+  chunk_overlap: 100
