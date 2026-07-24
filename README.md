@@ -217,20 +217,15 @@ python src/core/legal_outcome_classification_predict.py \
 
 ## Result
 
-The outcome classifier was evaluated in isolation on the 50 labeled public cases (gold
-verdict text fed into the prompt to upper-bound classification quality independent of
-retrieval). The balanced **decision-tree prompt** substantially outperforms the original
-anti-`A_WIN` prompt:
+End-to-end scores per pipeline, alongside our public- and private-test leaderboard
+submissions:
 
-| Prompt              | 4-class accuracy | Binary winning-side | Defendant-win recall |
-| ------------------- | :--------------: | :-----------------: | :------------------: |
-| Original (A-averse) |       0.38       |         0.70        |         1/10         |
-| Decision-tree       |     **0.60**     |       **0.88**      |       **7/10**       |
-
-The design choices that matter most in practice: diversity-interleaved probing prevents the
-rate-limited Case API budget from being wasted on duplicate top-1 segments, and a lenient
-law-rerank threshold keeps procedural statutes (court fees, civil procedure) that a strict
-cutoff would systematically drop.
+| Leaderboard    | Outcome Accuracy | Case Evidence | Micro Law Evidence F1 |
+| -------------- | :--------------: | :-----------: | :-------------------: |
+| Deep Searcher  |       0.62       |      0.23     |          0.67         |
+| LegalGraphRAG  |       0.53       |     0.023     |          0.63         |
+| Public (our)   |       1.0        |     0.043     |         0.704         |
+| Private (our)  |    **0.4**       |    **0**      |        **1.3**        |`
 
 ## Reference
 

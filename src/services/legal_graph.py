@@ -19,7 +19,8 @@ import jurist as da
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data"
-DEFAULT_GRAPH_PATH = REPO_ROOT / ".cache" / "legal_graph_store.pkl"
+DEFAULT_GRAPH_DB_PATH = REPO_ROOT / ".cache" / "graph_db"
+DEFAULT_COLLECTION_NAME = "legal_graph_store.pkl"
 
 GRAPH_NODE_TYPE = "Cases"
 RELATION_CITES = "CITES"
@@ -558,7 +559,8 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--corpus-path", type=str, default=None)
     parser.add_argument("--input-path", type=str, default=None)
     parser.add_argument("--output-path", type=str, default=None)
-    parser.add_argument("--graph-path", type=str, default=None)
+    parser.add_argument("--graph-db-path", type=str, default=None)
+    parser.add_argument("--collection-name", type=str, default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--llm-provider", type=str, default=None)
@@ -586,10 +588,19 @@ def _build_settings(args: argparse.Namespace) -> da.Settings:
     return da.Settings.from_environment(overrides)
 
 
+def _resolve_graph_path(graph_db_path: Optional[str], collection_name: Optional[str]) -> str:
+    graph_db = Path(graph_db_path) if graph_db_path else DEFAULT_GRAPH_DB_PATH
+    collection = Path(collection_name) if collection_name else Path(DEFAULT_COLLECTION_NAME)
+    store = collection if collection.is_absolute() else graph_db / collection
+    store.parent.mkdir(parents=True, exist_ok=True)
+    graph_db.mkdir(parents=True, exist_ok=True)
+    return str(store)
+
+
 def main(argv: Sequence[str]) -> int:
     args = _parse_args(argv)
     settings = _build_settings(args)
-    graph_path = args.graph_path or str(DEFAULT_GRAPH_PATH)
+    graph_path = _resolve_graph_path(args.graph_db_path, args.collection_name)
     application = Application(settings, graph_path)
     if args.index:
         application.index(recreate=True)

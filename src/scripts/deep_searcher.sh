@@ -8,11 +8,12 @@ LLM=VLSP2025-LegalSML/qwen3-4b-legal-pretrain
 VLLM_API_BASE=http://localhost:8001/v1
 VLLM_SERVED_NAME=vietnamese-law
 
-TEST_PATH="$ROOT/data/ALQAC_private_test.json"
-LAW_PATH="$ROOT/data/private_test_60_cases_extracted_corpus.json"
+LEADERBOARD="public"
+TEST_PATH="$ROOT/data/ALQAC2026_public_test.json"
+LAW_PATH="$ROOT/data/corpus_law_pub.json"
 CACHE_DIR="$ROOT/.cache"
-VECTOR_PATH="$ROOT/.cache/milvus_deepsearcher.db"
-COLLECTION=alqac_law_corpus
+VECTOR_PATH="$ROOT/.cache/milvus.db"
+COLLECTION="alqac_${LEADERBOARD}_law_corpus"
 DENSE_MODEL=hiieu/halong_embedding
 
 INDEX_ARGS=(
@@ -42,7 +43,7 @@ case "$MODE" in
     $PY deep_searcher.py \
       "${LLM_ARGS[@]}" "${INDEX_ARGS[@]}" \
       --test-path "$TEST_PATH" \
-      --output-path "$SUBMISSION_DIR/submission_deep_searcher.json"
+      --output-path "$SUBMISSION_DIR/submission_${LEADERBOARD}_deep_searcher.json"
     ;;
   *)
     echo "usage: bash deep_searcher.sh [index|search]"

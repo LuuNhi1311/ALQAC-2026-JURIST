@@ -44,6 +44,23 @@ class Milvus(BaseVectorDB):
         )
 
         self.hybrid = hybrid
+        self._loaded_collections: set = set()
+
+    def _ensure_loaded(self, collection: str) -> None:
+        """Load a collection into memory before search/query.
+
+        A collection that exists on disk but was created in another process
+        starts in the 'released' state; Milvus requires load_collection()
+        before any search/get/query. Guarded so it only runs once per process.
+        """
+        if collection in self._loaded_collections:
+            return
+        try:
+            self.client.load_collection(collection)
+        except Exception as e:
+            log.critical(f"fail to load collection [{collection}], error info: {e}")
+            return
+        self._loaded_collections.add(collection)
 
     def init_collection(
         self,
@@ -205,6 +222,7 @@ class Milvus(BaseVectorDB):
         if not collection:
             collection = self.default_collection
         try:
+            self._ensure_loaded(collection)
             use_hybrid = self.hybrid and query_text
 
             if use_hybrid:

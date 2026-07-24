@@ -20,10 +20,11 @@ VLLM_SERVED_NAME=vietnamese-law
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SUBMISSION_DIR="/mnt/HDD6/longpm/alqac/submissions"
 
-COLLECTION_NAME=alqac_private_law_corpus
-INPUT_PATH=$ROOT/data/ALQAC_private_test.json
-CORPUS_PATH=$ROOT/data/private_test_60_cases_extracted_corpus.json
-QDRANT_LOCAL_PATH=$ROOT/.cache/qdrant_$COLLECTION_NAME
+LEADERBOARD="public"
+COLLECTION_NAME="alqac_${LEADERBOARD}_law_corpus"
+INPUT_PATH=$ROOT/data/ALQAC2026_public_test.json
+CORPUS_PATH=$ROOT/data/corpus_law_pub.json
+QDRANT_LOCAL_PATH=$ROOT/.cache/qdrant
 
 export HF_HOME=/mnt/HDD6/longpm/alqac/hf
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
@@ -69,7 +70,7 @@ RUN=(
   --law_select true
   --law_evidence_target 8
   --trace_output "$ROOT/output.json"
-  --output-path "$SUBMISSION_DIR/submission_jurist_${PROVIDER}.json"
+  --output-path "$SUBMISSION_DIR/submission_${LEADERBOARD}_jurist_${PROVIDER}.json"
 )
 [ -n "$LIMIT" ] && RUN+=(--limit "$LIMIT")
 
