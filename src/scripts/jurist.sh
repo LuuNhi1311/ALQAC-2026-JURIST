@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-INDEX=0
 PREDICTOR_KIND=llm
 LIMIT=
 
@@ -46,6 +45,7 @@ ARGS=(
   --sparse_model_name "$SPARSE_MODEL"
 )
 
+MODE="${1:-search}"
 mkdir -p "$SUBMISSION_DIR"
 cd "$ROOT/src/services"
 
@@ -69,9 +69,19 @@ RUN=(
   --law_select true
   --law_evidence_target 8
   --trace_output "$ROOT/output.json"
-  --output-path "$SUBMISSION_DIR/submission_deep_agents_${PROVIDER}.json"
+  --output-path "$SUBMISSION_DIR/submission_jurist_${PROVIDER}.json"
 )
-[ "$INDEX" = 1 ] && RUN=(--index --recreate "${RUN[@]}")
 [ -n "$LIMIT" ] && RUN+=(--limit "$LIMIT")
 
-python deep_agents.py "${RUN[@]}"
+case "$MODE" in
+  index)
+    python jurist.py --index-only --recreate "${RUN[@]}"
+    ;;
+  search)
+    python jurist.py "${RUN[@]}"
+    ;;
+  *)
+    echo "usage: bash jurist.sh [index|search]"
+    exit 1
+    ;;
+esac

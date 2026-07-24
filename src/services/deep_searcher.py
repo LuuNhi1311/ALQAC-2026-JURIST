@@ -7,6 +7,7 @@ import math
 import os
 import pickle
 import re
+import sys
 import time
 from abc import ABC, abstractmethod
 from collections import Counter
@@ -22,6 +23,23 @@ except Exception:
 
 os.environ["LANGCHAIN_TRACING_V2"] = "false"
 os.environ["LANGSMITH_TRACING"] = "false"
+
+DEEP_SEARCHER_ROOT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core", "deep-searcher"
+)
+if DEEP_SEARCHER_ROOT not in sys.path:
+    sys.path.insert(0, DEEP_SEARCHER_ROOT)
+
+from tqdm import tqdm
+from deepsearcher.embedding.sentence_transformer_embedding import (
+    SENTENCE_TRANSFORMER_MODEL_DIM_MAP,
+    SentenceTransformerEmbedding,
+)
+from deepsearcher.vector_db.milvus import Milvus
+from deepsearcher.loader.splitter import Chunk
+from deepsearcher.utils import log as ds_log
+
+ds_log.dev_logger.setLevel("WARNING")
 
 
 PREDICTION_LABELS: Tuple[str, ...] = ("A_WIN", "PARTIAL_A_WIN", "PARTIAL_B_WIN", "B_WIN")
@@ -85,6 +103,11 @@ class AppConfig:
     cache_dir: str
     read_cache: bool
     write_cache: bool
+    index_only: bool
+    dense_model: str
+    vector_path: str
+    collection: str
+    deepsearch_max_iter: int
 
 
 @dataclass(frozen=True)
@@ -231,8 +254,8 @@ class LiteLlmLanguageModel(LanguageModel):
             except Exception as error:
                 last_error = error
                 print(
-                    f"LLM '{self._model_name}' lỗi (lần {attempt + 1}/{self._max_retries}): {error} "
-                    f"-> chờ {self._retry_delay * (attempt + 1):.0f}s rồi thử lại.",
+                    f"LLM '{self._model_name}' error (attempt {attempt + 1}/{self._max_retries}): {error} "
+                    f"-> retrying in {self._retry_delay * (attempt + 1):.0f}s.",
                     flush=True,
                 )
                 time.sleep(self._retry_delay * (attempt + 1))
@@ -274,7 +297,7 @@ class FallbackLanguageModel(LanguageModel):
         try:
             return self._primary.generate(system_prompt, user_prompt)
         except Exception as error:
-            print(f"LLM chính thất bại ({error}) -> chuyển sang model dự phòng.", flush=True)
+            print(f"Primary LLM failed ({error}) -> switching to fallback model.", flush=True)
             return self._fallback.generate(system_prompt, user_prompt)
 
 
@@ -349,7 +372,7 @@ class HttpCaseSegmentSource(CaseSegmentSource):
                 if rate_limit_hits > self._max_rate_limit_retries:
                     return []
                 print(
-                    f"Bị rate limit (429) -> chờ {self._rate_limit_delay:.0f}s rồi thử lại "
+                    f"Rate limited (429) -> waiting {self._rate_limit_delay:.0f}s before retry "
                     f"({rate_limit_hits}/{self._max_rate_limit_retries}).",
                     flush=True,
                 )
@@ -858,8 +881,12 @@ class SubmissionWriter:
     @staticmethod
     def write(path: str, records: Sequence[SubmissionRecord]) -> None:
         payload = [record.to_dict() for record in records]
-        with open(path, "w", encoding="utf-8") as handle:
+        directory = os.path.dirname(path) or "."
+        os.makedirs(directory, exist_ok=True)
+        tmp = f"{path}.tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
 
 
 class DeepSearcherPipeline:
@@ -884,11 +911,32 @@ class DeepSearcherPipeline:
             law_evidence=laws,
         )
 
-    def run(self, cases: Sequence[LegalCase]) -> List[SubmissionRecord]:
+    def run(
+        self,
+        cases: Sequence[LegalCase],
+        output_path: Optional[str] = None,
+    ) -> List[SubmissionRecord]:
         records: List[SubmissionRecord] = []
         for position, case in enumerate(cases, start=1):
             print(f"[{position}/{len(cases)}] {case.case_id}", flush=True)
-            records.append(self.run_case(case))
+            try:
+                records.append(self.run_case(case))
+            except Exception as error:
+                print(
+                    f"⚠️ [case {case.case_id}] FAILED ({error}) -> fallback "
+                    f"'{DEFAULT_PREDICTION}'",
+                    flush=True,
+                )
+                records.append(
+                    SubmissionRecord(
+                        case_id=case.case_id,
+                        prediction=DEFAULT_PREDICTION,
+                        case_evidence=[],
+                        law_evidence=[],
+                    )
+                )
+            if output_path is not None:
+                SubmissionWriter.write(output_path, records)
         return records
 
 
@@ -896,7 +944,7 @@ class CaseSourceFactory:
     @staticmethod
     def create(config: AppConfig) -> CaseSegmentSource:
         if not config.api_key:
-            print("Không có API key cho Case Content API -> chạy offline (case_evidence rỗng).", flush=True)
+            print("No API key for the Case Content API -> running offline (empty case_evidence).", flush=True)
             return NullCaseSegmentSource()
         return HttpCaseSegmentSource(
             api_url=config.api_url,
@@ -928,7 +976,7 @@ class ArtifactCache:
         if self._read_cache:
             cached = self._load(path)
             if cached is not None:
-                print(f"Dùng lại index từ cache: {path}", flush=True)
+                print(f"Reusing index from cache: {path}", flush=True)
                 return cached
         artifact = builder()
         if self._write_cache:
@@ -954,9 +1002,91 @@ class ArtifactCache:
             os.makedirs(self._cache_dir, exist_ok=True)
             with open(path, "wb") as handle:
                 pickle.dump(artifact, handle, protocol=pickle.HIGHEST_PROTOCOL)
-            print(f"Đã lưu index vào cache: {path}", flush=True)
+            print(f"Saved index to cache: {path}", flush=True)
         except Exception:
             pass
+
+
+class DeepSearcherLawStore:
+    def __init__(self, embedding_model: object, vector_db: object, collection: str) -> None:
+        self._embedding = embedding_model
+        self._vector_db = vector_db
+        self._collection = collection
+
+    @classmethod
+    def create(cls, config: AppConfig) -> "DeepSearcherLawStore":
+        embedding_model = SentenceTransformerEmbedding(model=config.dense_model)
+        client = embedding_model.client
+        get_dim = getattr(client, "get_embedding_dimension", None) or client.get_sentence_embedding_dimension
+        SENTENCE_TRANSFORMER_MODEL_DIM_MAP.setdefault(config.dense_model, get_dim())
+        os.makedirs(os.path.dirname(config.vector_path) or ".", exist_ok=True)
+        vector_db = Milvus(uri=config.vector_path, token="", default_collection=config.collection)
+        return cls(embedding_model, vector_db, config.collection)
+
+    def index(self, articles: Sequence[LawArticle]) -> None:
+        chunks = [
+            Chunk(
+                text=article.content,
+                reference=str(article.law_id),
+                metadata={"law_id": article.law_id, "aid": article.aid},
+            )
+            for article in articles
+        ]
+        chunks = self._embedding.embed_chunks(chunks)
+        self._vector_db.init_collection(
+            dim=self._embedding.dimension,
+            collection=self._collection,
+            description="ALQAC law corpus",
+            force_new_collection=True,
+        )
+        self._vector_db.insert_data(collection=self._collection, chunks=chunks)
+
+    def search(self, query: str, top_k: int) -> List[object]:
+        vector = self._embedding.embed_documents([query])[0]
+        return self._vector_db.search_data(collection=self._collection, vector=vector, top_k=top_k)
+
+
+class DeepSearcherLawRetriever(LawEvidenceRetriever):
+    def __init__(
+        self,
+        store: DeepSearcherLawStore,
+        max_results: int,
+        articles: Sequence[LawArticle],
+    ) -> None:
+        self._store = store
+        self._max_results = max_results
+        self._valid = {(article.law_id, article.aid) for article in articles}
+
+    def retrieve(self, case: LegalCase, evidence: Sequence[RetrievedChunk]) -> List[LawReference]:
+        query = self._build_query(case, evidence)
+        try:
+            results = self._store.search(query, self._max_results * 3)
+        except Exception as error:
+            print(f"DeepSearcher retrieval error: {error}", flush=True)
+            return []
+        references: List[LawReference] = []
+        seen: Set[Tuple[str, int]] = set()
+        for result in results:
+            metadata = getattr(result, "metadata", None) or {}
+            law_id = metadata.get("law_id")
+            aid = metadata.get("aid")
+            if law_id is None or aid is None:
+                continue
+            try:
+                key = (str(law_id), int(aid))
+            except (TypeError, ValueError):
+                continue
+            if key in seen or key not in self._valid:
+                continue
+            seen.add(key)
+            references.append(LawReference(law_id=key[0], aid=key[1]))
+        return references[: self._max_results]
+
+    @staticmethod
+    def _build_query(case: LegalCase, evidence: Sequence[RetrievedChunk]) -> str:
+        parts = [case.case_query]
+        parts.extend(chunk.text for chunk in evidence)
+        return " ".join(parts)[:4000]
 
 
 class PipelineBuilder:
@@ -985,15 +1115,15 @@ class PipelineBuilder:
         return FallbackLanguageModel(primary, fallback)
 
     @staticmethod
+    def build_index(config: AppConfig, articles: Sequence[LawArticle]) -> DeepSearcherLawStore:
+        store = DeepSearcherLawStore.create(config)
+        store.index(articles)
+        return store
+
+    @staticmethod
     def build(config: AppConfig, articles: Sequence[LawArticle]) -> DeepSearcherPipeline:
         model = PipelineBuilder._make_model(config, config.llm_temperature)
-        cache = ArtifactCache(config.cache_dir, config.read_cache, config.write_cache)
-        fingerprint = fingerprint_file(config.law_path)
-        texts = [article.content for article in articles]
-        index = cache.load_or_build(
-            f"bm25|{CACHE_VERSION}|{fingerprint}",
-            lambda: Bm25Index(texts),
-        )
+        store = DeepSearcherLawStore.create(config)
         planner = SubQueryPlanner(model=model, queries_per_round=config.subqueries_per_round)
         collector = CaseEvidenceCollector(
             source=CaseSourceFactory.create(config),
@@ -1002,18 +1132,16 @@ class PipelineBuilder:
             max_calls=config.max_case_calls,
         )
         corpus_law_ids = {article.law_id for article in articles}
-        bm25_fallback = Bm25LlmLawRetriever(
-            model=model,
-            articles=articles,
-            index=index,
-            shortlist_size=config.law_shortlist_size,
+        law_fallback = DeepSearcherLawRetriever(
+            store=store,
             max_results=config.max_law_evidence,
+            articles=articles,
         )
         law_retriever = CitationLawExtractor(
             resolver=LawNameResolver(corpus_law_ids=corpus_law_ids),
             index=ArticleNumberIndex(articles),
             max_results=config.max_law_evidence,
-            fallback=bm25_fallback,
+            fallback=law_fallback,
         )
         outcome_model = model
         if config.outcome_samples > 1:
@@ -1064,7 +1192,13 @@ def parse_arguments() -> AppConfig:
     parser.add_argument("--cache-dir", default=".cache")
     parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--rebuild-cache", action="store_true")
+    parser.add_argument("--index-only", action="store_true")
+    parser.add_argument("--dense-model", default="hiieu/halong_embedding")
+    parser.add_argument("--vector-path", default=None)
+    parser.add_argument("--collection", default="alqac_law_corpus")
+    parser.add_argument("--deepsearch-max-iter", type=int, default=2)
     parsed = parser.parse_args()
+    vector_path = parsed.vector_path or os.path.join(parsed.cache_dir, "deepsearcher_milvus.db")
     api_key = None if parsed.offline else resolve_api_key(parsed.api_key)
     return AppConfig(
         test_path=parsed.test_path,
@@ -1096,18 +1230,99 @@ def parse_arguments() -> AppConfig:
         cache_dir=parsed.cache_dir,
         read_cache=not parsed.no_cache and not parsed.rebuild_cache,
         write_cache=not parsed.no_cache,
+        index_only=parsed.index_only,
+        dense_model=parsed.dense_model,
+        vector_path=vector_path,
+        collection=parsed.collection,
+        deepsearch_max_iter=parsed.deepsearch_max_iter,
     )
+
+
+def _load_existing_records(path: str) -> List[Dict[str, object]]:
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except Exception:
+        return []
+    return [record for record in data if isinstance(record, dict)] if isinstance(data, list) else []
+
+
+def _record_from_dict(record: Dict[str, object]) -> SubmissionRecord:
+    law_evidence = [
+        LawReference(law_id=str(item.get("law_id")), aid=int(item.get("aid")))
+        for item in (record.get("law_evidence") or [])
+        if isinstance(item, dict) and item.get("aid") is not None
+    ]
+    return SubmissionRecord(
+        case_id=str(record.get("case_id", "")),
+        prediction=str(record.get("prediction", DEFAULT_PREDICTION)),
+        case_evidence=list(record.get("case_evidence") or []),
+        law_evidence=law_evidence,
+    )
+
+
+def _next_output_path(path: str) -> str:
+    root, ext = os.path.splitext(path)
+    index = 2
+    while os.path.exists(f"{root}-{index}{ext}"):
+        index += 1
+    return f"{root}-{index}{ext}"
+
+
+def _resolve_resume(
+    path: str,
+    case_ids: Sequence[str],
+) -> Tuple[str, Dict[str, SubmissionRecord], Set[str]]:
+    existing = _load_existing_records(path)
+    done = {str(record.get("case_id")) for record in existing}
+    if existing and done.issuperset(case_ids):
+        return _next_output_path(path), {}, set()
+    records = {str(record.get("case_id")): _record_from_dict(record) for record in existing}
+    return path, records, set(records)
 
 
 def main() -> None:
     config = parse_arguments()
-    cases = CaseRepository.load(config.test_path)
     articles = LawRepository.load(config.law_path)
-    print(f"Đã nạp {len(cases)} vụ án và {len(articles)} điều luật.", flush=True)
+    if config.index_only:
+        store = PipelineBuilder.build_index(config, articles)
+        print(
+            f"📇 Indexed {len(articles)} law articles into DeepSearcher "
+            f"(Milvus: {config.vector_path}, collection: {config.collection}).",
+            flush=True,
+        )
+        _ = store
+        return
+    cases = CaseRepository.load(config.test_path)
+    print(f"📂 Loaded {len(cases)} cases and {len(articles)} law articles.", flush=True)
+    case_ids = [case.case_id for case in cases]
+    output_path, records, done = _resolve_resume(config.output_path, case_ids)
+    if output_path != config.output_path:
+        print(f"🔁 [resume] {config.output_path} already complete -> writing new file: {output_path}", flush=True)
+    elif done:
+        print(f"🔁 [resume] continuing: {len(done)}/{len(cases)} cases already in {output_path}", flush=True)
     pipeline = PipelineBuilder.build(config, articles)
-    records = pipeline.run(cases)
-    SubmissionWriter.write(config.output_path, records)
-    print(f"Đã ghi {len(records)} kết quả vào {config.output_path}.", flush=True)
+    bar = tqdm(
+        total=len(cases),
+        initial=len(done),
+        desc="🔎 DeepSearcher",
+        colour="magenta",
+        unit="case",
+        dynamic_ncols=True,
+        bar_format="{desc} {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
+    )
+    for case in cases:
+        if case.case_id in done:
+            continue
+        record = pipeline.run_case(case)
+        records[case.case_id] = record
+        SubmissionWriter.write(output_path, [records[cid] for cid in case_ids if cid in records])
+        bar.update(1)
+        bar.set_postfix_str(f"⚖️ {case.case_id} → {record.prediction}")
+    bar.close()
+    print(f"✅ Wrote {len(records)} results to {output_path}.", flush=True)
 
 
 if __name__ == "__main__":

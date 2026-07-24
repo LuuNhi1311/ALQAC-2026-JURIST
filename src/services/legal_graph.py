@@ -1,21 +1,28 @@
 from __future__ import annotations
 
 import argparse
+import importlib
+import json
 import os
-import pickle
 import re
 import sys
+import types
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
+from tqdm import tqdm
 
-import deep_agents as da
+import jurist as da
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-DEFAULT_GRAPH_PATH = Path(__file__).resolve().parent / "legal_graph_store.pkl"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = REPO_ROOT / "data"
+DEFAULT_GRAPH_PATH = REPO_ROOT / ".cache" / "legal_graph_store.pkl"
+
+GRAPH_NODE_TYPE = "Cases"
+RELATION_CITES = "CITES"
 
 CITATION_SPAN = re.compile(
     r"((?:(?:kho[aả]n\s+\d+\s+)?[Đđ]i[eề]u\s+\d+[\s,;và]*)+)\s*(?:c[uủ]a\s+)?"
@@ -26,15 +33,23 @@ ARTICLE_NUMBER = re.compile(r"[Đđ]i[eề]u\s+(\d+)")
 SEED_SIZE: int = 10
 EXPAND_TOP: int = 5
 NEIGHBOR_HOPS: int = 2
+KNN_TOP_K: int = 3
 
 
-@dataclass
-class GraphNode:
-    point_id: str
-    law_id: str
-    aid: int
-    text: str
-    neighbors: List[str] = field(default_factory=list)
+def _import_legalgraphrag() -> Tuple[Any, Any]:
+    if "ALQAC" not in sys.modules:
+        alias = types.ModuleType("ALQAC")
+        alias.__path__ = [str(REPO_ROOT)]
+        sys.modules["ALQAC"] = alias
+    base = "ALQAC.src.core.LegalGraphRAG.core.graph_construct"
+    graph_db = importlib.import_module(f"{base}.graph_db")
+    feature_graph = importlib.import_module(f"{base}.feature_graph")
+    return graph_db, feature_graph
+
+
+_graph_db, _feature_graph = _import_legalgraphrag()
+GraphDBManager = _graph_db.GraphDBManager
+InMemoryGraphDB = _graph_db.InMemoryGraphDB
 
 
 @dataclass(frozen=True)
@@ -129,120 +144,107 @@ class CitationGraphBuilder:
         neighbors[target.point_id].add(source.point_id)
 
 
-class InMemoryVectorGraph:
-    def __init__(self) -> None:
-        self._nodes: Dict[str, GraphNode] = {}
-        self._ids: List[str] = []
-        self._matrix: Optional[np.ndarray] = None
+class LegalGraphIndex:
+    def __init__(self, db: "InMemoryGraphDB") -> None:
+        self._db = db
 
     def __len__(self) -> int:
-        return len(self._ids)
+        return len(self._db.get_nodes_by_type(GRAPH_NODE_TYPE))
 
-    def add_nodes(self, nodes: Sequence[GraphNode], embeddings: Sequence[Sequence[float]]) -> None:
-        self._nodes = {node.point_id: node for node in nodes}
-        self._ids = [node.point_id for node in nodes]
-        self._matrix = np.asarray(embeddings, dtype=np.float32)
-
-    def semantic_search(self, query_vector: Sequence[float], top_k: int) -> List[Tuple[GraphNode, float]]:
-        if self._matrix is None or not self._ids:
-            return []
-        query = np.asarray(query_vector, dtype=np.float32)
-        scores = self._matrix @ query
-        limit = min(top_k, len(scores))
-        if limit <= 0:
-            return []
-        pivot = np.argpartition(-scores, limit - 1)[:limit]
-        order = pivot[np.argsort(-scores[pivot])]
-        return [(self._nodes[self._ids[index]], float(scores[index])) for index in order]
+    def semantic_search(self, query_vector: Sequence[float], top_k: int) -> List[Tuple[Dict[str, Any], float]]:
+        records = self._db.find_similar_nodes(np.asarray(query_vector, dtype=np.float32), GRAPH_NODE_TYPE, top_k)
+        return [(record, float(record.get("similarity", 0.0))) for record in records]
 
     def neighbors(self, point_id: str) -> List[str]:
-        node = self._nodes.get(point_id)
-        return list(node.neighbors) if node else []
+        return list(dict.fromkeys(self._db.get_neighbors(point_id)))
 
-    def get(self, point_id: str) -> Optional[GraphNode]:
-        return self._nodes.get(point_id)
+    def get(self, point_id: str) -> Optional[Dict[str, Any]]:
+        return self._db.get_node(point_id)
 
     def edge_count(self) -> int:
-        return sum(len(node.neighbors) for node in self._nodes.values())
+        return self._db.graph.number_of_edges()
 
-    def save(self, path: str) -> None:
+    @staticmethod
+    def save(path: str) -> None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "ids": self._ids,
-            "matrix": self._matrix,
-            "nodes": {
-                point_id: {
-                    "law_id": node.law_id,
-                    "aid": node.aid,
-                    "text": node.text,
-                    "neighbors": node.neighbors,
-                }
-                for point_id, node in self._nodes.items()
-            },
-        }
-        with open(path, "wb") as handle:
-            pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        GraphDBManager.save(path)
 
     @classmethod
-    def load(cls, path: str) -> "InMemoryVectorGraph":
-        with open(path, "rb") as handle:
-            payload = pickle.load(handle)
-        graph = cls()
-        graph._ids = list(payload["ids"])
-        graph._matrix = np.asarray(payload["matrix"], dtype=np.float32)
-        graph._nodes = {
-            point_id: GraphNode(
-                point_id=point_id,
-                law_id=data["law_id"],
-                aid=int(data["aid"]),
-                text=data["text"],
-                neighbors=list(data["neighbors"]),
-            )
-            for point_id, data in payload["nodes"].items()
-        }
-        return graph
+    def load(cls, path: str) -> "LegalGraphIndex":
+        GraphDBManager.load(path)
+        return cls(GraphDBManager.get_db())
 
     @staticmethod
     def exists(path: str) -> bool:
         return os.path.exists(path)
 
 
-class GraphBuilder:
+class LegalGraphIndexBuilder:
     def __init__(
         self,
         loader: da.JsonLawCorpusLoader,
         citation_builder: CitationGraphBuilder,
         embedder: da.DenseEmbedder,
+        knn_top_k: int,
     ) -> None:
         self._loader = loader
         self._citation_builder = citation_builder
         self._embedder = embedder
+        self._knn_top_k = knn_top_k
 
-    def build(self) -> InMemoryVectorGraph:
+    def build(self) -> LegalGraphIndex:
         articles = self._loader.load()
-        print(f"[graph] loaded {len(articles)} law articles", flush=True)
+        print(f"🧩 [graph] loaded {len(articles)} law articles", flush=True)
         neighbors = self._citation_builder.build(articles)
-        nodes = [
-            GraphNode(
-                point_id=article.point_id,
-                law_id=article.law_id,
-                aid=article.aid,
-                text=article.text,
-                neighbors=neighbors.get(article.point_id, []),
-            )
-            for article in articles
-        ]
         embeddings = self._embedder.encode_documents([article.text for article in articles])
-        graph = InMemoryVectorGraph()
-        graph.add_nodes(nodes, embeddings)
-        print(f"[graph] built {len(graph)} nodes | {graph.edge_count()} directed citation edges", flush=True)
-        return graph
+
+        GraphDBManager.initialize()
+        db = GraphDBManager.get_db()
+        for article, embedding in zip(articles, embeddings):
+            db.add_node(
+                article.point_id,
+                GRAPH_NODE_TYPE,
+                {
+                    "law_id": article.law_id,
+                    "aid": article.aid,
+                    "description": article.text,
+                    "embedding": embedding,
+                    "neighbors": neighbors.get(article.point_id, []),
+                },
+            )
+
+        self._add_citation_edges(db, [article.point_id for article in articles], neighbors)
+        if self._knn_top_k > 0:
+            _feature_graph.run_knn(top_k=self._knn_top_k)
+        for point_id, score in db.compute_pagerank().items():
+            db.update_node(point_id, {"pagerank": float(score)})
+        for point_id, community in db.detect_communities().items():
+            db.update_node(point_id, {"communityId": int(community)})
+
+        print(
+            f"[graph] built {len(db.get_nodes_by_type(GRAPH_NODE_TYPE))} law nodes | "
+            f"{db.graph.number_of_edges()} edges (citation + knn top-{self._knn_top_k})",
+            flush=True,
+        )
+        return LegalGraphIndex(db)
+
+    @staticmethod
+    def _add_citation_edges(
+        db: "InMemoryGraphDB",
+        ids: Sequence[str],
+        neighbors: Dict[str, List[str]],
+    ) -> None:
+        present = set(ids)
+        for source in ids:
+            for target in neighbors.get(source, []):
+                if target in present:
+                    db.add_edge(source, target, RELATION_CITES)
 
 
 class AgenticGraphRetriever:
     def __init__(
         self,
-        graph: InMemoryVectorGraph,
+        index: LegalGraphIndex,
         embedder: da.DenseEmbedder,
         assessor: da.RetrievalAssessor,
         seed_size: int,
@@ -251,7 +253,7 @@ class AgenticGraphRetriever:
         max_iterations: int,
         max_evidence: int,
     ) -> None:
-        self._graph = graph
+        self._index = index
         self._embedder = embedder
         self._assessor = assessor
         self._seed_size = seed_size
@@ -294,36 +296,38 @@ class AgenticGraphRetriever:
             if not normalized:
                 continue
             query_vector = self._embedder.encode_query(normalized)
-            for node, score in self._graph.semantic_search(query_vector, self._seed_size):
-                current = collected.get(node.point_id)
+            for record, score in self._index.semantic_search(query_vector, self._seed_size):
+                current = collected.get(record["id"])
                 if current is None or score > current.score:
-                    collected[node.point_id] = self._to_reference(node, score)
+                    collected[record["id"]] = self._to_reference(record, score)
 
     def _expand(self, collected: Dict[str, GraphLawReference]) -> None:
         for _ in range(self._neighbor_hops):
             top = self._rank(collected)[: self._expand_top]
             frontier: List[str] = []
             for reference in top:
-                for neighbor_id in reference.neighbors:
+                for neighbor_id in self._index.neighbors(reference.point_id):
                     if neighbor_id not in collected:
                         frontier.append(neighbor_id)
             frontier = list(dict.fromkeys(frontier))
             if not frontier:
                 break
             for neighbor_id in frontier:
-                node = self._graph.get(neighbor_id)
-                if node is not None and node.point_id not in collected:
-                    collected[node.point_id] = self._to_reference(node, 0.0)
+                if neighbor_id in collected:
+                    continue
+                node = self._index.get(neighbor_id)
+                if node is not None:
+                    collected[neighbor_id] = self._to_reference({"id": neighbor_id, **node}, 0.0)
 
     @staticmethod
-    def _to_reference(node: GraphNode, score: float) -> GraphLawReference:
+    def _to_reference(record: Dict[str, Any], score: float) -> GraphLawReference:
         return GraphLawReference(
-            point_id=node.point_id,
-            law_id=node.law_id,
-            aid=node.aid,
-            text=node.text,
+            point_id=record["id"],
+            law_id=str(record.get("law_id", "")),
+            aid=int(record.get("aid", 0)),
+            text=str(record.get("description", "")),
             score=score,
-            neighbors=tuple(node.neighbors),
+            neighbors=tuple(record.get("neighbors", []) or []),
         )
 
     @staticmethod
@@ -369,11 +373,32 @@ class GraphRagPipeline:
             evidence.append(reference.as_evidence())
         return evidence
 
-    def run_dataset(self, cases: Sequence[da.LegalCase]) -> List[da.SubmissionEntry]:
+    def run_dataset(
+        self,
+        cases: Sequence[da.LegalCase],
+        checkpoint: Optional[Callable[[List[da.SubmissionEntry]], None]] = None,
+    ) -> List[da.SubmissionEntry]:
         entries: List[da.SubmissionEntry] = []
         for position, case in enumerate(cases, start=1):
             print(f"[case {position}/{len(cases)}] {case.case_id}", flush=True)
-            entries.append(self.run_case(case))
+            try:
+                entries.append(self.run_case(case))
+            except Exception as error:
+                print(
+                    f"⚠️ [case {case.case_id}] FAILED ({error}) -> fallback "
+                    f"'{da.DEFAULT_PREDICTION}'",
+                    flush=True,
+                )
+                entries.append(
+                    da.SubmissionEntry(
+                        case_id=case.case_id,
+                        case_evidence=[],
+                        law_evidence=[],
+                        prediction=da.DEFAULT_PREDICTION,
+                    )
+                )
+            if checkpoint is not None:
+                checkpoint(entries)
         return entries
 
 
@@ -381,7 +406,7 @@ class GraphPipelineFactory:
     @staticmethod
     def create(
         settings: da.Settings,
-        graph: InMemoryVectorGraph,
+        index: LegalGraphIndex,
         embedder: da.DenseEmbedder,
     ) -> GraphRagPipeline:
         model = da.LanguageModelFactory.create(settings)
@@ -389,7 +414,7 @@ class GraphPipelineFactory:
         decomposer = da.CaseQueryDecomposer(model, parser)
         assessor = da.RetrievalAssessor(model, parser)
         retriever = AgenticGraphRetriever(
-            graph=graph,
+            index=index,
             embedder=embedder,
             assessor=assessor,
             seed_size=settings.law_search_limit,
@@ -427,36 +452,107 @@ class GraphPipelineFactory:
         )
 
 
+def _load_existing_entries(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except Exception:
+        return []
+    return [record for record in data if isinstance(record, dict)] if isinstance(data, list) else []
+
+
+def _entry_from_dict(record: Dict[str, Any]) -> da.SubmissionEntry:
+    return da.SubmissionEntry(
+        case_id=str(record.get("case_id", "")),
+        case_evidence=list(record.get("case_evidence", []) or []),
+        law_evidence=list(record.get("law_evidence", []) or []),
+        prediction=str(record.get("prediction", da.DEFAULT_PREDICTION)),
+    )
+
+
+def _next_output_path(base: Path) -> Path:
+    index = 2
+    while True:
+        candidate = base.with_name(f"{base.stem}-{index}{base.suffix}")
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+
+def _resolve_resume(
+    base: Path,
+    case_ids: Sequence[str],
+) -> Tuple[Path, Dict[str, da.SubmissionEntry], Set[str]]:
+    existing = _load_existing_entries(base)
+    done = {str(record.get("case_id")) for record in existing}
+    if existing and done.issuperset(case_ids):
+        return _next_output_path(base), {}, set()
+    entries = {str(record.get("case_id")): _entry_from_dict(record) for record in existing}
+    return base, entries, set(entries)
+
+
 class Application:
     def __init__(self, settings: da.Settings, graph_path: str) -> None:
         self._settings = settings
         self._graph_path = graph_path
         self._embedder = da.EmbedderFactory.create_dense(settings)
 
-    def build_graph(self, recreate: bool) -> InMemoryVectorGraph:
-        if not recreate and InMemoryVectorGraph.exists(self._graph_path):
-            print(f"[graph] found existing store -> skip stage 1: {self._graph_path}", flush=True)
-            return InMemoryVectorGraph.load(self._graph_path)
-        print("[graph] stage 1: building citation graph + Halong embeddings", flush=True)
+    def build_graph(self, recreate: bool) -> LegalGraphIndex:
+        if not recreate and LegalGraphIndex.exists(self._graph_path):
+            print(f"🧩 [graph] found existing store -> skip stage 1: {self._graph_path}", flush=True)
+            return LegalGraphIndex.load(self._graph_path)
+        print("🧩 [graph] stage 1: building LegalGraphRAG in-memory graph DB (Halong embeddings + citation/knn)", flush=True)
         loader = da.JsonLawCorpusLoader(self._settings.corpus_path)
-        graph = GraphBuilder(loader, CitationGraphBuilder(), self._embedder).build()
-        graph.save(self._graph_path)
-        print(f"[graph] saved store: {self._graph_path}", flush=True)
-        return graph
+        index = LegalGraphIndexBuilder(
+            loader,
+            CitationGraphBuilder(),
+            self._embedder,
+            knn_top_k=KNN_TOP_K,
+        ).build()
+        LegalGraphIndex.save(self._graph_path)
+        print(f"🧩 [graph] saved store: {self._graph_path}", flush=True)
+        return index
 
     def index(self, recreate: bool) -> None:
         self.build_graph(recreate=recreate)
 
     def infer(self, limit: Optional[int], recreate: bool) -> None:
-        graph = self.build_graph(recreate=recreate)
-        pipeline = GraphPipelineFactory.create(self._settings, graph, self._embedder)
+        index = self.build_graph(recreate=recreate)
+        pipeline = GraphPipelineFactory.create(self._settings, index, self._embedder)
         cases = da.CaseDatasetLoader(self._settings.input_path).load(limit=limit)
-        entries = pipeline.run_dataset(cases)
-        da.SubmissionWriter(self._settings.output_path).write(entries)
+        case_ids = [case.case_id for case in cases]
+        base = Path(self._settings.output_path)
+        output_path, entries, done = _resolve_resume(base, case_ids)
+        if output_path != base:
+            print(f"🔁 [resume] {base} đã hoàn tất -> ghi file mới: {output_path}", flush=True)
+        elif done:
+            print(f"🔁 [resume] tiếp tục: đã có {len(done)}/{len(cases)} vụ án trong {output_path}", flush=True)
+        writer = da.SubmissionWriter(output_path)
+        bar = tqdm(
+            total=len(cases),
+            initial=len(done),
+            desc="⚖️  LegalGraph",
+            colour="green",
+            unit="case",
+            dynamic_ncols=True,
+            bar_format="{desc} {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
+        )
+        for case in cases:
+            if case.case_id in done:
+                continue
+            entry = pipeline.run_case(case)
+            entries[case.case_id] = entry
+            writer.write([entries[cid] for cid in case_ids if cid in entries], quiet=True)
+            bar.update(1)
+            bar.set_postfix_str(f"📚 {case.case_id} → {entry.prediction}")
+        bar.close()
+        writer.write([entries[cid] for cid in case_ids if cid in entries])
 
 
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="ALQAC LegalGraph RAG (in-memory graph + Halong, 2-stage)")
+    parser = argparse.ArgumentParser(description="ALQAC LegalGraph RAG (LegalGraphRAG in-memory graph DB + Halong)")
     parser.add_argument("--index", action="store_true")
     parser.add_argument("--recreate", action="store_true")
     parser.add_argument("--corpus-path", type=str, default=None)
@@ -465,6 +561,10 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--graph-path", type=str, default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--llm-provider", type=str, default=None)
+    parser.add_argument("--vllm-api-base", type=str, default=None)
+    parser.add_argument("--vllm-model-name", type=str, default=None)
+    parser.add_argument("--vllm-api-key", type=str, default=None)
     return parser.parse_args(list(argv))
 
 
@@ -473,9 +573,16 @@ def _build_settings(args: argparse.Namespace) -> da.Settings:
         "corpus_path": Path(args.corpus_path) if args.corpus_path else DATA_DIR / "corpus_law_pub.json",
         "input_path": Path(args.input_path) if args.input_path else DATA_DIR / "ALQAC2026_public_test.json",
         "output_path": Path(args.output_path) if args.output_path else Path("submission_legal_graph.json"),
+        "llm_provider": args.llm_provider or os.environ.get("LLM_PROVIDER", "vllm"),
     }
     if args.device:
         overrides["device"] = args.device
+    if args.vllm_api_base:
+        overrides["vllm_api_base"] = args.vllm_api_base
+    if args.vllm_model_name:
+        overrides["vllm_model_name"] = args.vllm_model_name
+    if args.vllm_api_key:
+        overrides["vllm_api_key"] = args.vllm_api_key
     return da.Settings.from_environment(overrides)
 
 

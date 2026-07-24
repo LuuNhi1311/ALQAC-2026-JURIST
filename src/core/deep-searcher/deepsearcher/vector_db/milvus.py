@@ -117,7 +117,7 @@ class Milvus(BaseVectorDB):
                 schema.add_function(bm25_function)
 
             index_params = self.client.prepare_index_params()
-            index_params.add_index(field_name="embedding", metric_type=metric_type)
+            index_params.add_index(field_name="embedding", index_type="AUTOINDEX", metric_type=metric_type)
 
             if self.hybrid:
                 index_params.add_index(
@@ -229,7 +229,7 @@ class Milvus(BaseVectorDB):
             else:
                 search_results = self.client.search(
                     collection_name=collection,
-                    data=[vector],
+                    data=[[float(value) for value in vector]],
                     limit=top_k,
                     output_fields=["embedding", "text", "reference", "metadata"],
                     timeout=10,

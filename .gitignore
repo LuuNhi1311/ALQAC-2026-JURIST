@@ -181,6 +181,7 @@ __marimo__/
 
 **/*.json
 **/*.pkl
+**/*.tex
 .cache
 qdrant_storage_local
 qdrant_storage

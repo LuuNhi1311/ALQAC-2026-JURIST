@@ -148,7 +148,7 @@ class Settings:
             # Data / IO
             corpus_path=Path(source.get("corpus_path", base / "data" / "corpus_law_pub.json")),
             input_path=Path(source.get("input_path", base / "data" / "ALQAC2026_public_test.json")),
-            output_path=Path(source.get("output_path", base / "submission_deep_agents.json")),
+            output_path=Path(source.get("output_path", base / "submission_jurist.json")),
             # Vector store: Qdrant
             collection_name=str(source.get("collection_name", "alqac_law_corpus")),
             qdrant_url=source.get("qdrant_url", host),
@@ -2315,6 +2315,51 @@ class SubmissionWriter:
             print(f"💾 [write] {len(payload)} entries -> {self._output_path}", flush=True)
 
 
+def _load_existing_entries(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except Exception:
+        return []
+    return [record for record in data if isinstance(record, dict)] if isinstance(data, list) else []
+
+
+def _entry_from_dict(record: Dict[str, Any]) -> SubmissionEntry:
+    return SubmissionEntry(
+        case_id=str(record.get("case_id", "")),
+        case_evidence=list(record.get("case_evidence") or []),
+        law_evidence=list(record.get("law_evidence") or []),
+        prediction=str(record.get("prediction", "")),
+    )
+
+
+def _next_output_path(base: Path) -> Path:
+    index = 2
+    while True:
+        candidate = base.with_name(f"{base.stem}-{index}{base.suffix}")
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+
+def _resolve_resume(
+    base: Path,
+    case_ids: Sequence[str],
+) -> Tuple[Path, Dict[str, SubmissionEntry], Set[str]]:
+    existing = _load_existing_entries(base)
+    done = {str(record.get("case_id")) for record in existing if record.get("prediction")}
+    if existing and done.issuperset(case_ids):
+        return _next_output_path(base), {}, set()
+    entries = {
+        str(record.get("case_id")): _entry_from_dict(record)
+        for record in existing
+        if record.get("prediction")
+    }
+    return base, entries, set(entries)
+
+
 class Application:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -2328,35 +2373,44 @@ class Application:
         repository = RepositoryFactory.create(self._settings)
         if not repository.client.collection_exists(self._settings.collection_name):
             raise RuntimeError(
-                "Collection missing. Run indexing first: python deep_agents.py --index"
+                "Collection missing. Run indexing first: python jurist.py --index"
             )
         TRACE.enabled = bool(self._settings.trace_output)
         agent = DeepLegalAgentFactory.create(self._settings, repository)
         all_cases = CaseDatasetLoader(self._settings.input_path).load()
         processed = all_cases[:limit] if limit is not None else all_cases
-        writer = SubmissionWriter(self._settings.output_path)
+        base = self._settings.output_path
+        output_path, collected, done = _resolve_resume(base, [case.case_id for case in processed])
+        if output_path != base:
+            print(f"[resume] {base} đã hoàn tất -> ghi file mới: {output_path}", flush=True)
+        elif done:
+            print(f"[resume] tiếp tục: đã có {len(done)}/{len(processed)} vụ án trong {output_path}", flush=True)
+        writer = SubmissionWriter(output_path)
+        remaining = [case for case in processed if case.case_id not in done]
 
-        def _covered(entries: List[SubmissionEntry]) -> List[SubmissionEntry]:
-            done = {entry.case_id for entry in entries}
-            filled = list(entries)
+        def _covered() -> List[SubmissionEntry]:
+            filled: List[SubmissionEntry] = []
             for case in all_cases:
-                if case.case_id not in done:
-                    filled.append(
+                filled.append(
+                    collected.get(
+                        case.case_id,
                         SubmissionEntry(
                             case_id=case.case_id,
                             case_evidence=[],
                             law_evidence=[],
                             prediction="",
-                        )
+                        ),
                     )
+                )
             return filled
 
         def _checkpoint(entries: List[SubmissionEntry]) -> None:
-            writer.write(_covered(entries), quiet=True)
+            for entry in entries:
+                collected[entry.case_id] = entry
+            writer.write(_covered(), quiet=True)
 
-        entries = agent.run_dataset(processed, checkpoint=_checkpoint)
-        final = _covered(entries)
-        writer.write(final)
+        agent.run_dataset(remaining, checkpoint=_checkpoint)
+        writer.write(_covered())
         self._write_debug(agent.debug_rows)
         self._write_trace(agent.trace_entries)
 
@@ -2474,7 +2528,9 @@ _OVERRIDE_TYPES: Dict[str, Any] = {
 
 
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="ALQAC deep legal agent")
+    parser = argparse.ArgumentParser(
+        description="JURIST: Judicial Understanding via Retrieval, Inference, and Statute Tracking"
+    )
     # Actions
     parser.add_argument("--index", action="store_true")
     parser.add_argument("--index-only", action="store_true")

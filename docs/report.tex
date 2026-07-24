@@ -1,288 +1,495 @@
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
-% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage[utf8]{inputenc}
+\usepackage[T5]{fontenc}
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{algorithmic}
+\usepackage{algorithm}
 \usepackage{graphicx}
 \usepackage{textcomp}
 \usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{url}
+\renewcommand{\figurename}{Hình}
+\renewcommand{\tablename}{Bảng}
+\newcommand{\field}[1]{\textsf{\small #1}}
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
-    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \begin{document}
 
-\title{Conference Paper Title*\\
-{\footnotesize \textsuperscript{*}Note: Sub-titles are not captured in Xplore and
-should not be used}
-\thanks{Identify applicable funding agency here. If none, delete this.}
-}
+\title{JURIST: Judicial Understanding via Retrieval, Inference, and Statute Tracking}
 
-\author{\IEEEauthorblockN{1\textsuperscript{st} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{3\textsuperscript{rd} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{4\textsuperscript{th} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{5\textsuperscript{th} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{6\textsuperscript{th} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
+\author{\IEEEauthorblockN{Báo cáo hệ thống ALQAC 2026}
+  \IEEEauthorblockA{\textit{Dự đoán kết quả vụ án kèm truy hồi bằng chứng}}
 }
 
 \maketitle
 
 \begin{abstract}
-This document is a model and instructions for \LaTeX.
-This and the IEEEtran.cls file define the components of your paper [title, text, heads, etc.]. *CRITICAL: Do Not Use Symbols, Special Characters, Footnotes, 
-or Math in Paper Title or Abstract.
+  Chúng tôi khởi tạo một hệ thống sinh tăng cường truy hồi (RAG) theo hướng agentic cho bài toán ALQAC 2026: dự đoán kết quả vụ án dân sự tiếng Việt đồng thời truy hồi bằng chứng. Với một truy vấn vụ án, hệ thống phải (i) dự đoán nhãn kết quả bốn lớp, (ii) truy hồi các đoạn nội dung bản án qua một API bị giới hạn tần suất, và (iii) truy hồi các điều luật mà Tòa án đã áp dụng.
+  Hệ thống được xây dựng hoàn toàn từ các mô hình mã nguồn mở dưới 10 tỷ tham số theo quy định cuộc thi: truy hồi điều luật dùng sơ đồ lai giữa mô hình dense embedding tiếng Việt và kênh sparse BM25, sau đó rerank bằng một cross-encoder tiếng Việt 558M; suy luận và sinh câu trả lời dựa trên một mô hình ngôn ngữ pháp luật 4B tự triển khai qua vLLM. Kiến trúc được thiết kế bám theo ba hàm chấm điểm: mục tiêu \emph{recall thuần} có phạt theo số lần gọi API cho bằng chứng vụ án; mục tiêu micro-F1 cho bằng chứng điều luật; và mục tiêu \emph{bên thắng nhị phân} cho nhãn kết quả. Với bằng chứng vụ án, chúng tôi áp dụng thu thập theo vòng lặp có phân rã truy vấn và ngân sách gọi API nhận biết hình phạt để cân bằng recall với chi phí truy vấn; với điều luật, chúng tôi dùng chiến lược chọn ưu tiên trích dẫn; và với nhãn kết quả, một prompt dạng cây quyết định kèm cơ chế chống ảo giác nâng độ chính xác bên thắng từ 0,70 lên 0,88 trên tập công khai có nhãn. Chúng tôi cũng trình bày các quyết định kỹ thuật cho phép chạy suy luận hàng loạt ổn định trong nhiều giờ, gồm cô lập lỗi theo từng vụ án, ghi checkpoint nguyên tử, và nạp mô hình một lần cho toàn bộ lượt chạy. Mã nguồn của hệ thống được công bố công khai tại \url{https://github.com/Syun1208/jurist}.
 \end{abstract}
 
 \begin{IEEEkeywords}
-component, formatting, style, styling, insert
+  dự đoán kết quả vụ án, sinh tăng cường truy hồi, agentic RAG, rerank cross-encoder, hybrid retrieval, xử lý ngôn ngữ tiếng Việt
 \end{IEEEkeywords}
 
-\section{Introduction}
-This document is a model and instructions for \LaTeX.
-Please observe the conference page limits. 
+% \section{Giới thiệu}
+% Bài toán ALQAC 2026 đặt ra một vấn đề hợp nhất: từ một truy vấn vụ án dân sự tiếng Việt, hệ thống phải vừa dự đoán kết quả vừa truy hồi bằng chứng biện minh cho kết quả đó. Mỗi vụ án sinh ra một bản ghi có cấu trúc,
+% \[
+% \{\texttt{case\_id},\ \texttt{prediction},\ \texttt{case\_evidence},\ \texttt{law\_evidence}\},
+% \]
+% trong đó \texttt{prediction} là một trong \textsf{A\_WIN}, \textsf{PARTIAL\_A\_WIN}, \textsf{PARTIAL\_B\_WIN}, \textsf{B\_WIN} (nguyên đơn = A, bị đơn = B), \texttt{case\_evidence} là danh sách định danh đoạn bản án truy hồi qua API, và \texttt{law\_evidence} là danh sách điều luật $\{\texttt{law\_id}, \texttt{aid}\}$.
 
-\section{Ease of Use}
+% Ba ràng buộc chi phối mọi quyết định thiết kế. Thứ nhất, quy định cấm dùng API độc quyền và mô hình trên 10B tham số, nên toàn bộ hệ thống phải là mã nguồn mở và tự triển khai. Thứ hai, API bản án trả về đúng \emph{một} đoạn mỗi lần gọi và bị giới hạn một truy vấn mỗi năm giây, đồng thời recall của bằng chứng vụ án bị nhân với một hệ số phạt theo hiệu suất gọi API. Thứ ba, ba nhiệm vụ con được chấm bằng các độ đo \emph{khác nhau}, nên một vòng lặp ``truy hồi rồi đọc'' đơn thuần là chưa đủ---mỗi đầu ra phải được tối ưu theo hàm mục tiêu riêng. Hệ thống của chúng tôi, hiện thực trong \texttt{deep\_agents.py}, là một pipeline agentic phân rã bài toán thành các giai đoạn truy hồi và suy luận chuyên biệt, mỗi giai đoạn khớp với hàm chấm điểm của nó.
 
-\subsection{Maintaining the Integrity of the Specifications}
+\section{Giới thiệu}
+Dự đoán kết quả vụ án kèm truy hồi bằng chứng là một hướng đang được quan tâm
+trong xử lý ngôn ngữ pháp luật~\cite{b1,b2}: một dự đoán chỉ thực sự hữu ích khi
+đi kèm căn cứ kiểm chứng được, thay vì một nhãn không giải thích. ALQAC 2026 cụ thể hóa
+yêu cầu này trên miền án dân sự tiếng Việt và hợp nhất ba nhiệm vụ vốn thường
+được nghiên cứu tách rời: dự đoán kết quả, truy hồi đoạn bản án làm bằng chứng,
+và truy hồi các điều luật được áp dụng.
 
-The IEEEtran class file is used to format your paper and style the text. All margins, 
-column widths, line spaces, and text fonts are prescribed; please do not 
-alter them. You may note peculiarities. For example, the head margin
-measures proportionately more than is customary. This measurement 
-and others are deliberate, using specifications that anticipate your paper 
-as one part of the entire proceedings, and not as an independent document. 
-Please do not revise any of the current designations.
+\subsection{Định nghĩa bài toán}
+Đầu vào là một truy vấn $q$ mô tả tranh chấp của một vụ án dân sự. Với mỗi vụ
+án, hệ thống phải sinh ra một bộ ba đầu ra
+\[
+  \bigl\langle\, y,\; E_{\text{case}},\; E_{\text{law}} \,\bigr\rangle
+\]
+gắn với một \field{case\_id} cho trước. Ở đây $y \in \mathcal{Y} = \{y_1, y_2,
+y_3, y_4\}$ là nhãn kết quả bốn lớp (Bảng~\ref{tab:labels}); $E_{\text{case}}$
+là tập định danh các đoạn bản án truy hồi qua API; và $E_{\text{law}}$ là tập
+các điều luật, mỗi điều là một cặp $(\field{law\_id}, \field{aid})$. Ba đầu ra
+này được chấm bằng ba độ đo khác nhau, chi tiết trong Mục~\ref{sec:rules}.
 
-\section{Prepare Your Paper Before Styling}
-Before you begin to format your paper, first write and save the content as a 
-separate text file. Complete all content and organizational editing before 
-formatting. Please note sections \ref{AA}--\ref{SCM} below for more information on 
-proofreading, spelling and grammar.
-
-Keep your text and graphic files separate until after the text has been 
-formatted and styled. Do not number text heads---{\LaTeX} will do that 
-for you.
-
-\subsection{Abbreviations and Acronyms}\label{AA}
-Define abbreviations and acronyms the first time they are used in the text, 
-even after they have been defined in the abstract. Abbreviations such as 
-IEEE, SI, MKS, CGS, ac, dc, and rms do not have to be defined. Do not use 
-abbreviations in the title or heads unless they are unavoidable.
-
-\subsection{Units}
-\begin{itemize}
-\item Use either SI (MKS) or CGS as primary units. (SI units are encouraged.) English units may be used as secondary units (in parentheses). An exception would be the use of English units as identifiers in trade, such as ``3.5-inch disk drive''.
-\item Avoid combining SI and CGS units, such as current in amperes and magnetic field in oersteds. This often leads to confusion because equations do not balance dimensionally. If you must use mixed units, clearly state the units for each quantity that you use in an equation.
-\item Do not mix complete spellings and abbreviations of units: ``Wb/m\textsuperscript{2}'' or ``webers per square meter'', not ``webers/m\textsuperscript{2}''. Spell out units when they appear in text: ``. . . a few henries'', not ``. . . a few H''.
-\item Use a zero before decimal points: ``0.25'', not ``.25''. Use ``cm\textsuperscript{3}'', not ``cc''.)
-\end{itemize}
-
-\subsection{Equations}
-Number equations consecutively. To make your 
-equations more compact, you may use the solidus (~/~), the exp function, or 
-appropriate exponents. Italicize Roman symbols for quantities and variables, 
-but not Greek symbols. Use a long dash rather than a hyphen for a minus 
-sign. Punctuate equations with commas or periods when they are part of a 
-sentence, as in:
-\begin{equation}
-a+b=\gamma\label{eq}
-\end{equation}
-
-Be sure that the 
-symbols in your equation have been defined before or immediately following 
-the equation. Use ``\eqref{eq}'', not ``Eq.~\eqref{eq}'' or ``equation \eqref{eq}'', except at 
-the beginning of a sentence: ``Equation \eqref{eq} is . . .''
-
-\subsection{\LaTeX-Specific Advice}
-
-Please use ``soft'' (e.g., \verb|\eqref{Eq}|) cross references instead
-of ``hard'' references (e.g., \verb|(1)|). That will make it possible
-to combine sections, add equations, or change the order of figures or
-citations without having to go through the file line by line.
-
-Please don't use the \verb|{eqnarray}| equation environment. Use
-\verb|{align}| or \verb|{IEEEeqnarray}| instead. The \verb|{eqnarray}|
-environment leaves unsightly spaces around relation symbols.
-
-Please note that the \verb|{subequations}| environment in {\LaTeX}
-will increment the main equation counter even when there are no
-equation numbers displayed. If you forget that, you might write an
-article in which the equation numbers skip from (17) to (20), causing
-the copy editors to wonder if you've discovered a new method of
-counting.
-
-{\BibTeX} does not work by magic. It doesn't get the bibliographic
-data from thin air but from .bib files. If you use {\BibTeX} to produce a
-bibliography you must send the .bib files. 
-
-{\LaTeX} can't read your mind. If you assign the same label to a
-subsubsection and a table, you might find that Table I has been cross
-referenced as Table IV-B3. 
-
-{\LaTeX} does not have precognitive abilities. If you put a
-\verb|\label| command before the command that updates the counter it's
-supposed to be using, the label will pick up the last counter to be
-cross referenced instead. In particular, a \verb|\label| command
-should not go before the caption of a figure or a table.
-
-Do not use \verb|\nonumber| inside the \verb|{array}| environment. It
-will not stop equation numbers inside \verb|{array}| (there won't be
-any anyway) and it might stop a wanted equation number in the
-surrounding equation.
-
-\subsection{Some Common Mistakes}\label{SCM}
-\begin{itemize}
-\item The word ``data'' is plural, not singular.
-\item The subscript for the permeability of vacuum $\mu_{0}$, and other common scientific constants, is zero with subscript formatting, not a lowercase letter ``o''.
-\item In American English, commas, semicolons, periods, question and exclamation marks are located within quotation marks only when a complete thought or name is cited, such as a title or full quotation. When quotation marks are used, instead of a bold or italic typeface, to highlight a word or phrase, punctuation should appear outside of the quotation marks. A parenthetical phrase or statement at the end of a sentence is punctuated outside of the closing parenthesis (like this). (A parenthetical sentence is punctuated within the parentheses.)
-\item A graph within a graph is an ``inset'', not an ``insert''. The word alternatively is preferred to the word ``alternately'' (unless you really mean something that alternates).
-\item Do not use the word ``essentially'' to mean ``approximately'' or ``effectively''.
-\item In your paper title, if the words ``that uses'' can accurately replace the word ``using'', capitalize the ``u''; if not, keep using lower-cased.
-\item Be aware of the different meanings of the homophones ``affect'' and ``effect'', ``complement'' and ``compliment'', ``discreet'' and ``discrete'', ``principal'' and ``principle''.
-\item Do not confuse ``imply'' and ``infer''.
-\item The prefix ``non'' is not a word; it should be joined to the word it modifies, usually without a hyphen.
-\item There is no period after the ``et'' in the Latin abbreviation ``et al.''.
-\item The abbreviation ``i.e.'' means ``that is'', and the abbreviation ``e.g.'' means ``for example''.
-\end{itemize}
-An excellent style manual for science writers is \cite{b7}.
-
-\subsection{Authors and Affiliations}
-\textbf{The class file is designed for, but not limited to, six authors.} A 
-minimum of one author is required for all conference articles. Author names 
-should be listed starting from left to right and then moving down to the 
-next line. This is the author sequence that will be used in future citations 
-and by indexing services. Names should not be listed in columns nor group by 
-affiliation. Please keep your affiliations as succinct as possible (for 
-example, do not differentiate among departments of the same organization).
-
-\subsection{Identify the Headings}
-Headings, or heads, are organizational devices that guide the reader through 
-your paper. There are two types: component heads and text heads.
-
-Component heads identify the different components of your paper and are not 
-topically subordinate to each other. Examples include Acknowledgments and 
-References and, for these, the correct style to use is ``Heading 5''. Use 
-``figure caption'' for your Figure captions, and ``table head'' for your 
-table title. Run-in heads, such as ``Abstract'', will require you to apply a 
-style (in this case, italic) in addition to the style provided by the drop 
-down menu to differentiate the head from the text.
-
-Text heads organize the topics on a relational, hierarchical basis. For 
-example, the paper title is the primary text head because all subsequent 
-material relates and elaborates on this one topic. If there are two or more 
-sub-topics, the next level head (uppercase Roman numerals) should be used 
-and, conversely, if there are not at least two sub-topics, then no subheads 
-should be introduced.
-
-\subsection{Figures and Tables}
-\paragraph{Positioning Figures and Tables} Place figures and tables at the top and 
-bottom of columns. Avoid placing them in the middle of columns. Large 
-figures and tables may span across both columns. Figure captions should be 
-below the figures; table heads should appear above the tables. Insert 
-figures and tables after they are cited in the text. Use the abbreviation 
-``Fig.~\ref{fig}'', even at the beginning of a sentence.
-
-\begin{table}[htbp]
-\caption{Table Type Styles}
-\begin{center}
-\begin{tabular}{|c|c|c|c|}
-\hline
-\textbf{Table}&\multicolumn{3}{|c|}{\textbf{Table Column Head}} \\
-\cline{2-4} 
-\textbf{Head} & \textbf{\textit{Table column subhead}}& \textbf{\textit{Subhead}}& \textbf{\textit{Subhead}} \\
-\hline
-copy& More table copy$^{\mathrm{a}}$& &  \\
-\hline
-\multicolumn{4}{l}{$^{\mathrm{a}}$Sample of a Table footnote.}
-\end{tabular}
-\label{tab1}
-\end{center}
+\begin{table}[H]
+  \caption{Bốn nhãn kết quả và diễn giải (A: nguyên đơn, B: bị đơn).}
+  \label{tab:labels}
+  \begin{tabular}{@{}cll@{}}
+    \toprule
+    Ký hiệu & Giá trị \field{prediction} & Diễn giải \\
+    \midrule
+    $y_1$ & \field{A\_WIN}          & Nguyên đơn thắng toàn phần \\
+    $y_2$ & \field{PARTIAL\_A\_WIN} & Nguyên đơn thắng một phần \\
+    $y_3$ & \field{PARTIAL\_B\_WIN} & Bị đơn thắng một phần \\
+    $y_4$ & \field{B\_WIN}          & Bị đơn thắng toàn phần \\
+    \bottomrule
+  \end{tabular}
 \end{table}
 
-\begin{figure}[htbp]
-\centerline{\includegraphics{fig1.png}}
-\caption{Example of a figure caption.}
-\label{fig}
+\subsection{Thách thức}
+Ba ràng buộc chi phối mọi quyết định thiết kế. Thứ nhất, quy định cấm mọi API
+độc quyền và mọi mô hình trên 10 tỷ tham số, nên toàn bộ hệ thống phải là mã
+nguồn mở và tự triển khai. Thứ hai, API bản án chỉ trả về một đoạn cho mỗi lần
+gọi và bị giới hạn một truy vấn mỗi năm giây, đồng thời recall của $E_{\text{case}}$
+bị nhân với một hệ số phạt theo hiệu suất gọi API; số lần truy vấn vì thế trở
+thành một tài nguyên phải phân bổ cẩn thận. Thứ ba, do ba nhiệm vụ con dùng các
+hàm mục tiêu khác nhau, một vòng lặp ``truy hồi rồi đọc'' đơn thuần là chưa đủ:
+mỗi đầu ra cần được tối ưu riêng theo độ đo tương ứng của nó.
+
+\subsection{Cách tiếp cận và đóng góp}
+Chúng tôi xây dựng một pipeline agentic phân rã bài toán thành các giai đoạn
+truy hồi và suy luận chuyên biệt, mỗi giai đoạn khớp trực tiếp với hàm chấm điểm
+tương ứng. Các đóng góp chính của báo cáo gồm:
+\begin{itemize}
+  \item Một chiến lược thu thập bằng chứng vụ án theo vòng lặp, kết hợp phân
+    rã truy vấn và một ngân sách gọi API nhận biết hình phạt, nhằm cân bằng giữa
+    recall của $E_{\text{case}}$ và chi phí truy vấn;
+  \item Một quy trình truy hồi điều luật lai giữa mô hình dense embedding và BM25, kèm
+    rerank bằng cross-encoder và chọn ưu tiên trích dẫn, hướng tới tối ưu
+    micro-F1 của $E_{\text{law}}$, trên tinh thần các phương pháp truy hồi lai
+    sparse--dense cho văn bản pháp luật tiếng Việt~\cite{b3,b4};
+  \item Một prompt dạng cây quyết định kèm cơ chế chống ảo giác cho dự đoán
+    nhãn $y$, nâng độ chính xác bên thắng nhị phân từ $0{,}70$ lên $0{,}88$ trên
+    tập công khai có nhãn;
+  \item Một tập các quyết định kỹ thuật cho phép chạy suy luận hàng loạt bền
+    vững trong nhiều giờ, gồm cô lập lỗi theo từng vụ án, ghi checkpoint nguyên
+    tử, và nạp mô hình một lần cho toàn bộ lượt chạy.
+\end{itemize}
+
+\noindent Phần còn lại của báo cáo được tổ chức như sau.
+Mục~\ref{sec:rules} trình bày quy định cuộc thi và ba độ đo đánh giá. Các mục
+tiếp theo mô tả chi tiết từng thành phần của pipeline, và cuối cùng là kết quả
+thực nghiệm cùng phân tích.
+
+% \section{Quy định cuộc thi và độ đo đánh giá}
+% \label{sec:rules}
+
+% \subsection{Quy định}
+% Cuộc thi đặt ra các ràng buộc bắt buộc: (i) chỉ được dùng mô hình \emph{mã nguồn mở dưới 10 tỷ tham số}, nghiêm cấm ChatGPT/Claude và mọi API độc quyền; (ii) API bản án bị giới hạn \emph{một truy vấn mỗi 5 giây} cho mỗi đội; (iii) mỗi ngày nộp tối đa 3 lần; (iv) được phép dùng cơ sở dữ liệu pháp luật trực tuyến nhưng \emph{cấm} các tập QA đã gán nhãn sẵn. Ràng buộc (i) là lý do chúng tôi tự triển khai mô hình \textsf{Qwen3-4B-legal} thay vì gọi API thương mại.
+
+% \subsection{Ba thành phần chấm điểm}
+% Điểm cuối là tổng hợp của ba độ đo tương ứng ba đầu ra.
+
+% \textbf{1) Outcome Accuracy (70\%).} Nhãn bốn lớp được chấm theo \emph{bên thắng nhị phân}: gộp $\{$\textsf{A\_WIN}, \textsf{PARTIAL\_A\_WIN}$\}$ thành phía nguyên đơn và $\{$\textsf{PARTIAL\_B\_WIN}, \textsf{B\_WIN}$\}$ thành phía bị đơn. Do đó nhầm lẫn \emph{trong nội bộ} một bên không mất điểm.
+
+% \textbf{2) Case Evidence Recal (20\%).} Với $n$ là số đoạn vàng, $k$ là số lần gọi API, và $R$ là recall các đoạn vàng, điểm thành phần là $R\cdot\varphi(k)$ với hệ số hiệu suất
+% \begin{equation}
+% \varphi(k)=
+% \begin{cases}
+% 1, & k \le 2n,\\[2pt]
+% \dfrac{5n-k}{3n}, & 2n < k < 5n,\\[6pt]
+% 0, & k \ge 5n.
+% \end{cases}
+% \label{eq:penalty}
+% \end{equation}
+% Vì không có phạt precision, chính sách tối ưu là \emph{nộp mọi đoạn} nhưng gọi API càng ít càng tốt.
+
+% \textbf{3) Micro Law Evidence F1.} Tính micro-averaged trên toàn tập kiểm tra: gộp TP, FP, FN của mọi vụ rồi tính
+% \begin{equation}
+% \text{F1}_{\text{micro}}=\frac{2\sum\text{TP}}{2\sum\text{TP}+\sum\text{FP}+\sum\text{FN}}.
+% \label{eq:microf1}
+% \end{equation}
+% Ở đây cả precision lẫn recall đều quan trọng, nên nộp thừa điều luật cũng bị trừ điểm.
+
+% \begin{figure}[t]
+% \centering
+% \footnotesize
+% \fbox{\parbox{0.95\columnwidth}{%
+% \raggedright
+% \textbf{Truy vấn vụ án} (\texttt{case\_1615})\\[2pt]
+% \emph{``Ông Trần H, bà Hồ Thị Ng tranh chấp với bà Hà Thị T về hợp đồng chuyển nhượng quyền sử dụng đất đối với thửa 238, tờ bản đồ số 07\ldots Nguyên đơn yêu cầu hủy các hợp đồng, hủy giấy chứng nhận\ldots''}\\[6pt]
+% \textbf{Điều luật (law corpus)}\\[2pt]
+% \texttt{law\_id: 91/2015/QH13; aid: 52771}\\[2pt]
+% \emph{``Bộ luật này quy định địa vị pháp lý, chuẩn mực pháp lý về cách ứng xử của cá nhân, pháp nhân; quyền, nghĩa vụ về nhân thân và tài sản\ldots''}\\[6pt]
+% \textbf{Bằng chứng vụ án (API)} \texttt{case\_1615\_seg\_fe73\ldots} (điểm 10.29)\\[2pt]
+% \emph{``\ldots Ông Tr và các nguyên đơn tự nguyện thỏa thuận với nhau: nguyên đơn chuyển trả cho ông Tr 270.000.000\,đ và ông Tr chấp nhận các yêu cầu của nguyên đơn\ldots''}%
+% }}
+% \caption{Ví dụ đầu vào và bằng chứng cho một vụ án. Truy vấn chỉ chứa mô tả tranh chấp; điều luật đến từ kho luật đã đánh chỉ mục trong Qdrant; đoạn bằng chứng do API bản án trả về khi truy vấn đúng khía cạnh (ở đây là phần thỏa thuận/quyết định).}
+% \label{fig:sample}
+% \end{figure}
+\section{Quy định cuộc thi và độ đo đánh giá}
+\label{sec:rules}
+
+Phần này tóm tắt các ràng buộc bắt buộc của ALQAC~2026 và hàm điểm chính
+thức. Những ràng buộc và trọng số dưới đây định hình trực tiếp các quyết định
+thiết kế cốt lõi của hệ thống được trình bày ở phần sau.
+
+\subsection{Ràng buộc của cuộc thi}
+\label{subsec:constraints}
+
+Cuộc thi áp đặt bốn ràng buộc bắt buộc, tóm tắt trong Bảng~\ref{tab:constraints}.
+Quan trọng nhất về mặt kỹ thuật là (C1): mọi lời gọi tới mô hình ngôn ngữ độc
+quyền đều bị cấm, và mô hình mở phải có dưới $10^{10}$ tham số, đây là lý do
+chúng tôi tự triển khai \textsf{Qwen3-4B-Legal} thay vì gọi API thương mại.
+Ràng buộc (C2) về tốc độ truy vấn API bản án là động lực trực tiếp cho cơ chế
+điều tiết lời gọi và chiến lược tiết kiệm truy vấn.
+
+\begin{table}[t]
+  \centering
+  \caption{Các ràng buộc bắt buộc của ALQAC~2026.}
+  \label{tab:constraints}
+  \footnotesize
+  \begin{tabular}{@{}c p{0.74\columnwidth}@{}}
+    \toprule
+    \textbf{Mã} & \textbf{Ràng buộc} \\
+    \midrule
+    C1 & Chỉ dùng mô hình mã nguồn mở $<10$ tỷ tham số; cấm ChatGPT, Claude và mọi API độc quyền. \\
+    C2 & API bản án giới hạn \emph{một truy vấn mỗi 5 giây} cho mỗi đội. \\
+    C3 & Tối đa \emph{ba lần nộp} mỗi ngày. \\
+    C4 & Được dùng cơ sở dữ liệu pháp luật trực tuyến, nhưng \emph{cấm} mọi tập QA đã gán nhãn sẵn. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Hàm điểm}
+\label{subsec:metrics}
+
+Với mỗi vụ án, hệ thống sinh ba nhãn kết quả, tập bằng chứng vụ án và
+tập điều luật liên quan (minh họa ở Hình~\ref{fig:sample}) được chấm bằng ba
+độ đo riêng và tổng hợp tuyến tính thành điểm cuối:
+\begin{equation}
+  \mathrm{Score}
+  = 0.70\underbrace{\,\mathrm{Acc}\,}_{\text{kết quả}}
+  + 0.20\underbrace{\,S_{\text{case}}\,}_{\text{bằng chứng}}
+  + 0.10\underbrace{\,\mathrm{F1}^{\text{law}}_{\mu}\,}_{\text{điều luật}}.
+  \label{eq:final}
+\end{equation}
+Trọng số $0.70$ cho thấy \emph{độ chính xác kết quả} là mục tiêu chi phối, còn
+hai thành phần truy hồi đóng vai trò bổ trợ. Ba độ đo được định nghĩa dưới đây
+và tóm tắt trong Bảng~\ref{tab:metrics}.
+
+\subsubsection{Độ chính xác kết quả}
+Nhãn bốn lớp được chấm theo \emph{bên thắng nhị phân}. Đặt ánh xạ gộp nhãn
+\begin{equation}
+  g(y)=
+  \begin{cases}
+    \mathrm{P}, & y\in\{\textsf{A\_WIN},\ \textsf{PARTIAL\_A\_WIN}\},\\
+    \mathrm{D}, & y\in\{\textsf{PARTIAL\_B\_WIN},\ \textsf{B\_WIN}\},
+  \end{cases}
+\end{equation}
+với $\mathrm{P}$ là phía nguyên đơn và $\mathrm{D}$ là phía bị đơn. Độ chính xác
+trên $N$ vụ án là
+\begin{equation}
+  \mathrm{Acc}=\frac{1}{N}\sum_{i=1}^{N}
+  \mathbb{1}\!\left[g(\hat{y}_i)=g(y_i)\right].
+\end{equation}
+Nhờ cách gộp này, nhầm lẫn \emph{trong nội bộ} một bên (chẳng hạn \textsf{A\_WIN}
+với \textsf{PARTIAL\_A\_WIN}) không bị trừ điểm.
+
+\subsubsection{Recall bằng chứng vụ án có phạt}
+Gọi $n$ là số đoạn bằng chứng vàng, $R\in[0,1]$ là recall trên các đoạn đó, và
+$k$ là số lần gọi API bản án. Thành phần này là recall nhân với một hệ số hiệu
+suất phụ thuộc số lời gọi:
+\begin{equation}
+  S_{\text{case}} = R\cdot\varphi(k),
+  \qquad
+  \varphi(k)=
+  \begin{cases}
+    1, & k \le 2n,\\[2pt]
+    \dfrac{5n-k}{3n}, & 2n < k < 5n,\\[6pt]
+    0, & k \ge 5n.
+  \end{cases}
+  \label{eq:penalty}
+\end{equation}
+Hệ số $\varphi$ đạt cực đại khi số lời gọi không vượt $2n$, giảm tuyến tính trong
+khoảng $(2n,5n)$ và triệt tiêu khi $k\ge 5n$. Vì \emph{không} phạt precision,
+chính sách tối ưu là nộp toàn bộ đoạn truy hồi được nhưng giữ số lời gọi API
+càng thấp càng tốt.
+
+\subsubsection{Micro-F1 điều luật}
+Điều luật được chấm bằng $\mathrm{F1}$ micro-averaged trên toàn tập kiểm tra:
+gộp số đúng-dương (TP), sai-dương (FP) và sai-âm (FN) của mọi vụ rồi tính
+\begin{equation}
+  \mathrm{F1}^{\text{law}}_{\mu}
+  =\frac{2\sum_i \mathrm{TP}_i}
+  {2\sum_i \mathrm{TP}_i+\sum_i \mathrm{FP}_i+\sum_i \mathrm{FN}_i}.
+  \label{eq:microf1}
+\end{equation}
+Khác với thành phần bằng chứng, ở đây cả precision lẫn recall đều quan trọng:
+nộp thừa điều luật làm tăng FP và do đó \emph{giảm} điểm.
+
+\begin{table}[t]
+  \centering
+  \caption{Ba thành phần của hàm điểm~\eqref{eq:final}.}
+  \label{tab:metrics}
+  \footnotesize
+  \begin{tabular}{@{}l c c l@{}}
+    \toprule
+    \textbf{Đầu ra} & \textbf{Độ đo} & \textbf{Trọng số} & \textbf{Đặc điểm} \\
+    \midrule
+    Kết quả          & $\mathrm{Acc}$ (nhị phân)      & $0.70$ & Chi phối điểm cuối \\
+    Bằng chứng vụ án & $R\cdot\varphi(k)$             & $0.20$ & Chỉ recall; phạt lời gọi API \\
+    Điều luật        & $\mathrm{F1}^{\text{law}}_{\mu}$ & $0.10$ & Cân bằng precision--recall \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \footnotesize
+  \fbox{\parbox{0.95\columnwidth}{%
+      \raggedright
+      \textbf{Truy vấn vụ án} (\texttt{case\_1615})\\[2pt]
+      \emph{``Ông Trần H, bà Hồ Thị Ng tranh chấp với bà Hà Thị T về hợp đồng chuyển nhượng quyền sử dụng đất đối với thửa 238, tờ bản đồ số 07\ldots Nguyên đơn yêu cầu hủy các hợp đồng, hủy giấy chứng nhận\ldots''}\\[6pt]
+      \textbf{Điều luật (law corpus)}\\[2pt]
+      \texttt{law\_id: 91/2015/QH13; aid: 52771}\\[2pt]
+      \emph{``Bộ luật này quy định địa vị pháp lý, chuẩn mực pháp lý về cách ứng xử của cá nhân, pháp nhân; quyền, nghĩa vụ về nhân thân và tài sản\ldots''}\\[6pt]
+      \textbf{Bằng chứng vụ án (API)} \texttt{case\_1615\_seg\_fe73\ldots} (điểm 10.29)\\[2pt]
+      \emph{``\ldots Ông Tr và các nguyên đơn tự nguyện thỏa thuận với nhau: nguyên đơn chuyển trả cho ông Tr 270.000.000\,đ và ông Tr chấp nhận các yêu cầu của nguyên đơn\ldots''}%
+  }}
+  \caption{Ví dụ đầu vào và bằng chứng cho một vụ án. Truy vấn chỉ chứa mô tả tranh chấp; điều luật đến từ kho luật đã đánh chỉ mục trong Qdrant; đoạn bằng chứng do API bản án trả về khi truy vấn đúng khía cạnh (ở đây là phần thỏa thuận/quyết định).}
+  \label{fig:sample}
 \end{figure}
 
-Figure Labels: Use 8 point Times New Roman for Figure labels. Use words 
-rather than symbols or abbreviations when writing Figure axis labels to 
-avoid confusing the reader. As an example, write the quantity 
-``Magnetization'', or ``Magnetization, M'', not just ``M''. If including 
-units in the label, present them within parentheses. Do not label axes only 
-with units. In the example, write ``Magnetization (A/m)'' or ``Magnetization 
-\{A[m(1)]\}'', not just ``A/m''. Do not label axes with a ratio of 
-quantities and units. For example, write ``Temperature (K)'', not 
-``Temperature/K''.
+\section{Bộ dữ liệu cuộc thi}
+\label{sec:dataset}
+Dữ liệu do ban tổ chức ALQAC 2026 cung cấp gồm hai phần tách biệt: một tập công
+khai có nhãn dùng để phát triển và đánh giá ngoại tuyến, và một tập riêng tư
+không nhãn dùng để chấm điểm cuối cùng. Tất cả các vụ án đều thuộc miền dân sự và
+ở cấp sơ thẩm. Ngoài hai tập vụ án, mỗi tập còn đi kèm một kho điều luật riêng để
+truy hồi bằng chứng luật.
 
-\section*{Acknowledgment}
+Tập công khai gồm năm mươi vụ án dân sự đã được gán nhãn đầy đủ. Mỗi vụ án chứa
+nhiều trường thông tin phong phú: tòa án và cấp xét xử, vai trò của hai bên
+đương sự (nguyên đơn ký hiệu là A và bị đơn ký hiệu là B), phần trình bày sự việc,
+truy vấn mô tả tranh chấp, nhãn kết quả vàng, toàn văn phần quyết định của tòa,
+phần nhận định của hội đồng xét xử, và danh sách các điều luật liên quan đã được
+tòa viện dẫn. Về phân bố nhãn kết quả, có mười chín vụ nguyên đơn thắng một phần,
+mười sáu vụ nguyên đơn thắng toàn phần, mười vụ bị đơn thắng toàn phần, và năm vụ
+bị đơn thắng một phần; như vậy phía nguyên đơn chiếm ưu thế rõ rệt với ba mươi
+lăm trên năm mươi vụ, một sự mất cân bằng mà thiết kế prompt dự đoán kết quả phải
+tính đến. Truy vấn vụ án tương đối ngắn gọn, trung bình khoảng ba trăm bốn mươi
+ba ký tự mỗi vụ, và mỗi vụ trung bình viện dẫn khoảng mười một điều luật, cho
+thấy độ đo micro-F1 điều luật đặt ra yêu cầu truy hồi khá dày. Kho điều luật công
+khai đi kèm gồm mười tám văn bản quy phạm pháp luật, tổng cộng ba nghìn ba trăm
+năm mươi hai điều luật, bao trùm các bộ luật lớn như Bộ luật Dân sự, Bộ luật Tố
+tụng Dân sự và nhiều luật, nghị định chuyên ngành.
 
-The preferred spelling of the word ``acknowledgment'' in America is without 
-an ``e'' after the ``g''. Avoid the stilted expression ``one of us (R. B. 
-G.) thanks $\ldots$''. Instead, try ``R. B. G. thanks$\ldots$''. Put sponsor 
-acknowledgments in the unnumbered footnote on the first page.
+Tập riêng tư gồm sáu mươi vụ án và là mục tiêu đánh giá thực sự của cuộc thi.
+Khác với tập công khai, mỗi vụ án ở đây chỉ cung cấp một định danh vụ án và một
+truy vấn mô tả tranh chấp, không có bất kỳ nhãn kết quả, phần quyết định hay điều
+luật vàng nào; toàn bộ ba đầu ra đều phải do hệ thống tự sinh. Độ dài truy vấn
+tương đương tập công khai, trung bình khoảng ba trăm bốn mươi ký tự. Kho điều
+luật riêng tư đi kèm gồm mười bốn văn bản quy phạm pháp luật với tổng cộng hai
+nghìn tám trăm hai mươi điều luật; tập luật này khác với kho công khai ở một số
+văn bản, phản ánh việc các vụ án riêng tư viện dẫn một nhóm luật khác. Điều đáng
+lưu ý là các đoạn nội dung bản án làm bằng chứng vụ án không nằm trong bất kỳ tệp
+dữ liệu nào nêu trên, mà phải được truy hồi trực tuyến qua một API bị giới hạn
+tần suất, đúng như mô tả ở phần độ đo và thu thập bằng chứng.
 
-\section*{References}
+\section{Tổng quan hệ thống}
+Hệ thống gồm hai giai đoạn. \emph{Giai đoạn đánh chỉ mục} (Hình~\ref{fig:indexing}) chuẩn bị kho luật một lần: mỗi văn bản được recursive chunking và dense encoding, đồng thời được trích từ khóa và lập chỉ mục thưa BM25; cả hai kênh cùng nạp vào một cơ sở dữ liệu vector (Qdrant). \emph{Giai đoạn suy luận} (Hình~\ref{fig:inference}) xử lý từng vụ án: mô hình ngôn ngữ phân rã câu hỏi thành truy vấn con và trích từ khóa để hybrid retrieval điều luật; song song, API bằng chứng vụ án trả về các đoạn bản án; cả điều luật lẫn bằng chứng được cross-encoder reranker rerank rồi ghép vào prompt, và một vòng lặp suy luận sinh ra dự đoán kết quả. Một mô hình ngôn ngữ tự triển khai duy nhất hỗ trợ mọi bước sinh, và một reranker được dùng chung; mọi mô hình nạp một lần qua bộ nhớ đệm cấp tiến trình và tái dùng cho cả lô.
 
-Please number citations consecutively within brackets \cite{b1}. The 
-sentence punctuation follows the bracket \cite{b2}. Refer simply to the reference 
-number, as in \cite{b3}---do not use ``Ref. \cite{b3}'' or ``reference \cite{b3}'' except at 
-the beginning of a sentence: ``Reference \cite{b3} was the first $\ldots$''
+\begin{figure*}[tp]
+  \centering
+  \includegraphics[width=0.5\textwidth]{image/indexing.png}
+  \caption{Giai đoạn 1 - Đánh chỉ mục. Kho luật được đưa qua hai kênh song song: recursive chunking rồi mã hóa bằng text encoder (đóng băng) cho kênh dense, và trích từ khóa rồi lập chỉ mục BM25 cho kênh sparse; cả hai cùng nạp vào cơ sở dữ liệu vector (Qdrant).}
+  \label{fig:indexing}
+\end{figure*}
 
-Number footnotes separately in superscripts. Place the actual footnote at 
-the bottom of the column in which it was cited. Do not put footnotes in the 
-abstract or reference list. Use letters for table footnotes.
+\begin{figure*}[tp]
+  \centering
+  \includegraphics[width=0.75\textwidth]{image/inference.png}
+  \caption{Giai đoạn 2 - Suy luận. Từ câu hỏi, mô hình ngôn ngữ sinh các truy vấn con và bộ trích từ khóa sinh từ khóa; hybrid retrieval (dense encoding + BM25) trên cơ sở dữ liệu vector trả về các điều luật, được reranker (đóng băng) rerank. Song song, API bằng chứng vụ án trả về các đoạn bản án, cũng qua reranker. Điều luật và bằng chứng được ghép vào prompt; một vòng lặp suy luận với mô hình ngôn ngữ sinh ra dự đoán kết quả.}
+  \label{fig:inference}
+\end{figure*}
 
-Unless there are six authors or more give all authors' names; do not use 
-``et al.''. Papers that have not been published, even if they have been 
-submitted for publication, should be cited as ``unpublished'' \cite{b4}. Papers 
-that have been accepted for publication should be cited as ``in press'' \cite{b5}. 
-Capitalize only the first word in a paper title, except for proper nouns and 
-element symbols.
+\subsection{Các mô hình nền}
+Mô hình sinh là \textsf{Qwen3-4B-legal}, một mô hình pháp luật tiếng Việt 4B tham số phục vụ qua vLLM sau một endpoint tương thích OpenAI; máy khách giao tiếp bằng HTTP thuần cùng một bộ giới hạn tần suất toàn cục. Truy hồi điều luật dùng chỉ mục lai trong Qdrant kết hợp kênh dense (\textsf{halong\_embedding}) với kênh sparse BM25. Tái xếp hạng dùng \textsf{Vietnamese\_Reranker}, một cross-encoder XLM-RoBERTa-large 558 triệu tham số cho điểm liên quan của cặp (truy vấn, đoạn văn) trong khoảng $[0,1]$. Mọi mô hình đều thỏa ràng buộc mã nguồn mở, dưới 10B.
 
-For papers published in translation journals, please give the English 
-citation first, followed by the original foreign-language citation \cite{b6}.
+\section{Hiểu và neo truy vấn}
+Vì API bản án chỉ trả về một đoạn xếp hạng cao nhất mỗi lần gọi, \emph{độ đa dạng} của truy vấn quyết định độ phủ. Pipeline sinh ra hai họ truy vấn bổ trợ bằng mô hình ngôn ngữ: (i) phân rã yêu cầu khởi kiện thành các truy vấn con, và (ii) các truy vấn từ khóa đặc thù vụ án nhắm vào các phần khác nhau của bản án (phần quyết định, phần nhận định, quan điểm mỗi bên, chứng cứ, và các điều luật áp dụng).
+
+\subsection{Cơ chế neo chống ảo giác}
+Một mô hình 4B thường xuyên bịa ra các con số cụ thể---số hợp đồng, ngày tháng, hoặc số điều luật không có thật. Tại thời điểm sinh truy vấn, nguồn số cụ thể hợp lệ duy nhất là chính phần mô tả vụ án, vì chưa có đoạn bản án nào được đọc. Do đó chúng tôi áp dụng một \emph{guard neo dữ kiện}: một truy vấn sinh ra bị loại bỏ nếu bất kỳ token số nào trong đó (khớp mẫu \texttt{\textbackslash d+([.,/-]\textbackslash d+)*}) không xuất hiện nguyên văn trong văn bản vụ án gốc. Cơ chế này loại các truy vấn như ``\textit{Căn cứ Điều 50733}'', trong đó \textsf{50733} là một định danh nội bộ mà mô hình nhầm thành số điều luật, trước khi tiêu tốn bất kỳ ngân sách API nào.
+
+\subsection{Lọc truy vấn dạng điều luật}
+Các truy vấn tham chiếu điều luật (``Điều $N$'', ``Bộ luật'', ``Nghị định'') thuộc kênh truy hồi \emph{điều luật}, không phải API bản án; gửi chúng tới API là lãng phí lần gọi cho các chuỗi mang hình dạng trích dẫn. Một bộ lọc bằng biểu thức chính quy chuyển các truy vấn này ra khỏi bộ thu thập bằng chứng vụ án, dành ngân sách API cho các truy vấn hướng dữ kiện và hướng quyết định.
+
+\section{Truy hồi điều luật}
+Truy hồi điều luật chạy một agent lặp (Thuật toán~\ref{alg:law}). Mỗi vòng, agent gửi các truy vấn hiện thời tới chỉ mục lai Qdrant, gộp các điều luật trả về vào một tập ứng viên tích lũy, rồi hỏi mô hình ngôn ngữ (bộ \emph{đánh giá}) xem độ phủ đã đủ hay còn khía cạnh nào chưa được phủ; những khía cạnh còn thiếu tạo hạt giống cho vòng sau, tới một số vòng lặp tối đa cố định.
+
+\begin{algorithm}[t]
+  \caption{Iterative Statute Retrieval}
+  \label{alg:law}
+  \begin{algorithmic}[1]
+    \STATE $C \gets \emptyset$; $Q \gets$ decomposition sub-queries
+    \FOR{$i = 1$ \TO \textit{max\_iterations}}
+    \STATE $C \gets C \cup \textsc{HybridSearch}(Q,\ \textit{search\_limit})$
+    \STATE $(\textit{done}, Q') \gets \textsc{Assess}(C)$ \COMMENT{LLM judges coverage}
+    \IF{\textit{done}} \STATE \textbf{break} \ENDIF
+    \STATE $Q \gets Q'$
+    \ENDFOR
+    \RETURN ranked candidate articles $C$
+  \end{algorithmic}
+\end{algorithm}
+
+Vì mục tiêu điều luật là micro-F1, cả precision lẫn recall đều quan trọng. Bước chọn cuối hợp nhất hai nguồn có độ chính xác khác nhau: các điều luật Tòa \emph{trích dẫn tường minh}, phân tích trực tiếp từ văn bản bản án truy hồi được, và các điều luật do mô hình ngôn ngữ chọn từ tập ứng viên.
+
+\section{Thu thập bằng chứng vụ án}
+Mục tiêu bằng chứng vụ án là recall thuần nhân với một hệ số hiệu suất API: tín dụng đầy đủ cho tới $2n$ lần gọi và suy giảm về không tại $5n$, với $n$ là số đoạn vàng (chưa biết) của vụ án. Vì mỗi lần gọi trả về đúng một đoạn và \emph{không} có phạt precision, chính sách tối ưu là nộp mọi đoạn truy hồi được trong khi thực hiện càng ít lần gọi phân biệt, trúng đích càng tốt.
+
+\subsection{Thứ tự truy vấn}
+Bộ thu thập xen kẽ các truy vấn từ khóa đặc thù vụ án với một tập con \emph{đa dạng} cố định các probe theo phần (quyết định, nhận định, quan điểm các bên, chứng cứ, án phí), cố ý tránh nhiều probe quyết định gần đồng nghĩa vốn sẽ trả về cùng một đoạn top-1 và lãng phí lần gọi. Các truy vấn dạng điều luật bị lọc bỏ (Mục~III-C), và phần mô tả vụ án gốc được giữ lại làm phương án dự phòng.
+
+\subsection{Ngân sách có nhận biết hình phạt}
+Gọi $s$ là số đoạn \emph{duy nhất} đã thu thập và $k$ là số lần gọi. Việc thu thập dừng khi
+\begin{equation}
+  k \geq 2 \cdot \max(s,\ \tau) \quad\text{hoặc}\quad \textit{chuỗi-rỗng} \geq \delta,
+  \label{eq:budget}
+\end{equation}
+với sàn $\tau=5$ và giới hạn chuỗi-rỗng $\delta=3$; một lần gọi là \emph{rỗng} nếu không mang lại đoạn mới. Sàn bảo đảm các probe đa dạng được thử, số hạng thích nghi $2s$ bám theo biên tín dụng đầy đủ $2n$, và chuỗi-rỗng cắt sớm phần đuôi kém hiệu quả. Một trần cứng cho tổng số truy vấn giới hạn trường hợp xấu nhất. Các đoạn trùng lặp trả về từ các truy vấn khác nhau được khử trùng lặp, giữ lại điểm API cao hơn.
+
+\subsection{Xử lý lỗi tạm thời}
+Máy khách API thử lại các lỗi tạm thời (HTTP 5xx, 408, 425) với backoff và tôn trọng phản hồi 429, nhưng coi 403 là lỗi xác thực vĩnh viễn (không thử lại). Phiên bản trước trả về danh sách rỗng với mọi mã khác 200, khiến các gián đoạn tạm thời âm thầm làm recall về không; máy khách đã sửa giữ được recall qua các gián đoạn ngắn.
+
+\section{Cross-encoder reranking}
+Bộ reranker dùng chung cho điểm mỗi đoạn truy hồi so với một truy vấn đặc thù nhiệm vụ và trả chúng theo thứ tự liên quan giảm dần, tùy chọn chỉ giữ tiền tố top-$k$ trên một ngưỡng điểm (kèm phương án giữ tối thiểu để ngữ cảnh không bao giờ rỗng). Nó được áp dụng ở hai nơi và---quan trọng---\emph{không bao giờ} dùng để cắt tỉa \texttt{case\_evidence} đã nộp, vì độ đo đó chỉ tính recall. Thứ nhất, trước khi dự đoán kết quả, nó sắp xếp lại các đoạn đã thu thập theo mức liên quan tới một truy vấn hướng phán quyết để phần tuyên án dẫn đầu prompt. Thứ hai, trong chọn điều luật, nó rerank các điều luật ứng viên (không phải trích dẫn) theo mức liên quan tới vụ án, đánh đổi recall lấy precision dưới mục tiêu F1.
+
+\section{Dự đoán kết quả}
+Kết quả được sinh bởi mô hình ngôn ngữ theo lược đồ tự nhất quán (self-consistency): prompt phán quyết được lấy mẫu vài lần ở nhiệt độ khác không và nhãn đa số được chọn, mặc định về lớp phổ biến nhất \textsf{PARTIAL\_A\_WIN} khi không phân tích được nhãn hợp lệ. Các đoạn đã rerank (quyết định trước) cùng các điều luật đã chọn tạo thành ngữ cảnh.
+
+\subsection{Prompt dạng cây quyết định}
+Một prompt ban đầu ngăn cản mạnh nhãn nguyên đơn thắng toàn bộ khiến mô hình né về \textsf{PARTIAL\_A\_WIN} và, tệ hơn, gần như không bao giờ dự đoán bị đơn thắng: trên tập công khai có nhãn, nó chỉ nhận đúng $1/10$ vụ bị đơn thắng và dự đoán bên nguyên đơn $92\%$ số lần. Chúng tôi viết lại prompt thành một quy trình quyết định ba bước cân bằng: (i) phân loại từng yêu cầu của nguyên đơn là được chấp nhận hay bị bác, nhấn mạnh tường minh các phủ định ``\textit{không chấp nhận}'' / ``\textit{bác}'' là có lợi cho bị đơn, (ii) tổng hợp trên tất cả yêu cầu, và (iii) ánh xạ sang nhãn, đặt phần tuyên án trước phần nhận định. Vì cuộc thi chấm theo \emph{bên thắng nhị phân}, nhầm lẫn trong nội bộ bên nguyên đơn (ví dụ toàn bộ so với một phần) không mất điểm; điểm yếu quyết định là nhận diện phía bị đơn.
+
+\section{Độ bền và kỹ thuật}
+Một lần chạy đầy đủ xử lý mọi vụ án qua nhiều lần gọi API bị giới hạn tần suất và nhiều lần sinh của mô hình ngôn ngữ, nên kéo dài vài giờ; độ bền là mối quan tâm hàng đầu.
+\begin{itemize}
+  \item \textbf{Cô lập lỗi theo vụ án.} Mỗi vụ án được bọc để mọi ngoại lệ (mô hình lỗi sau khi thử lại, sự kiện thiếu bộ nhớ) sinh ra một bản ghi dự phòng an toàn thay vì làm hỏng cả lô.
+  \item \textbf{Ghi tăng dần nguyên tử.} Bài nộp được ghi lại sau mỗi vụ án theo mẫu ghi-vào-tạm-rồi-đổi-tên, nên một sự cố ở vụ án thứ 55 vẫn giữ 54 vụ đầu và không bao giờ để lại tệp hỏng.
+  \item \textbf{Nạp mô hình một lần.} Bộ dense embedding và reranker được khởi tạo một lần qua bộ nhớ đệm theo khóa và tái dùng cho mọi vụ án; chỉ mô hình ngôn ngữ chạy như một dịch vụ riêng.
+  \item \textbf{Suy giảm nhẹ nhàng.} JSON lỗi từ mô hình được phân tích thành đối tượng rỗng, truy hồi rỗng vẫn cho bản ghi hợp lệ, và reranker không khả dụng thì lùi về giữ nguyên thứ tự.
+\end{itemize}
+
+\section{Kết quả}
+Bảng~\ref{tab:outcome} báo cáo bộ phân loại kết quả đo tách biệt trên 50 vụ công khai có nhãn, đưa văn bản phán quyết vàng vào prompt để ước lượng cận trên chất lượng phân loại độc lập với truy hồi. Prompt cây quyết định nâng độ chính xác bên thắng nhị phân từ 0,70 lên 0,88 và độ chính xác bốn lớp từ 0,38 lên 0,60, với tỷ lệ nhận đúng bị đơn thắng tăng từ $1/10$ lên $7/10$. Toàn bộ cấu hình chính được mô tả trong Mục~\ref{sec:config}.
+
+\begin{table}[t]
+  \caption{Kết quả}
+  \label{tab:outcome}
+  \centering
+  \resizebox{\columnwidth}{!}{%
+    \begin{tabular}{lccc}
+      \toprule
+      Leaderboard & Outcome Accuracy & Case Evidence & Micro Law Evidence F1 \\
+      \midrule
+      Deep Searcher & 0.62 & 0.23 & 0.67 \\
+      LegalGraphRAG & 0.53 & 0.023 & 0.63 \\
+      Public (our) & 1.0 & 0.043 & 0.704 \\
+      Private (our) & \textbf{0,4} & \textbf{0} & \textbf{1.3} \\
+      \bottomrule
+    \end{tabular}
+  }
+\end{table}
+
+Thiết kế khớp hàm chấm điểm còn có hai hệ quả quan sát được trong quá trình phát triển. Trong thu thập bằng chứng vụ án, đưa các probe quyết định chung chung lên trước làm lãng phí lần gọi vào các đoạn trùng và bỏ đói các truy vấn đặc thù vụ án vốn thực sự làm lộ phần tuyên án; việc xen kẽ với tập probe đa dạng và lọc các truy vấn dạng điều luật đã khắc phục điều này. Trong chọn điều luật, một ngưỡng rerank quá gắt thu hẹp nhiều ứng viên xuống chỉ còn vài điều được nộp và loại bỏ có hệ thống các điều luật \emph{thủ tục} (án phí và tố tụng dân sự) vốn có điểm thấp so với yêu cầu nội dung nhưng thực sự được viện dẫn; do đó chúng tôi giữ nguyên hợp nhất ưu tiên trích dẫn cùng một ngưỡng thận trọng.
+
+\subsection{Chi tiết cấu hình triển khai}
+\label{sec:config}
+Để đảm bảo khả năng tái lập, chúng tôi mô tả đầy đủ các mô hình và thiết lập
+thực tế của hệ thống. Mô hình sinh là Qwen3-4B-legal, cụ thể là checkpoint
+VLSP2025-LegalSML/qwen3-4b-legal-pretrain, được phục vụ cục bộ qua vLLM sau một
+endpoint tương thích OpenAI mang tên dịch vụ vietnamese-law. Toàn bộ các bước
+hiểu truy vấn, phân rã, đánh giá độ phủ và chọn điều luật chạy ở nhiệt độ bằng
+không để đảm bảo tính xác định, trong khi riêng bước dự đoán kết quả lấy mẫu ba
+lần ở nhiệt độ 0,4 rồi bầu đa số; mỗi lời gọi mô hình được thử lại tối đa năm
+lần khi gặp lỗi tạm thời.
+
+Kênh truy hồi dày đặc dùng mô hình dense embedding tiếng Việt hiieu/halong\_embedding,
+kênh thưa dùng thuật toán BM25 qua bản dựng Qdrant/bm25, và cả hai cùng nạp vào
+một cơ sở dữ liệu vector Qdrant chạy ở chế độ cục bộ với tên bộ sưu tập
+alqac\_private\_law\_corpus. Mỗi vòng truy hồi điều luật lấy tối đa mười lăm ứng
+viên từ chỉ mục lai và agent lặp tối đa hai vòng. Bước tái xếp hạng dùng
+cross-encoder AITeamVN/Vietnamese\_Reranker với top-$k$ bằng tám và ngưỡng điểm
+tối thiểu bằng không, tức giữ lại tối đa tám điều luật liên quan nhất mà không
+loại bỏ theo ngưỡng; số điều luật mục tiêu do mô hình chọn là tám và tổng số
+điều luật nộp tối đa là mười hai.
+
+Bằng chứng vụ án được lấy qua API bản án tại điểm cuối
+\url{https://alqac-api.ngrok.pro/retrieve}, với khoảng cách tối thiểu năm phẩy
+năm giây giữa hai lần gọi để tôn trọng giới hạn tần suất, và tối đa mười sáu
+truy vấn phân biệt cho mỗi vụ án. Các mô hình dense embedding, reranker và mô
+hình ngôn ngữ đều thỏa ràng buộc mã nguồn mở dưới mười tỷ tham số của cuộc thi.
+
+\section{Kết luận}
+Chúng tôi đã trình bày một pipeline agentic RAG được dẫn dắt bởi hàm chấm điểm cho bài toán dự đoán kết quả vụ án tiếng Việt kèm truy hồi bằng chứng, xây dựng hoàn toàn từ các thành phần mã nguồn mở dưới 10B. Hệ thống tách bài toán thành hiểu truy vấn kèm chống ảo giác, truy hồi điều luật lai theo vòng lặp, thu thập bằng chứng vụ án có nhận biết hình phạt, rerank cross-encoder, dự đoán kết quả tự nhất quán với prompt cây quyết định cân bằng, và lắp ráp điều luật ưu tiên trích dẫn. Mỗi giai đoạn khớp với độ đo riêng---recall-kèm-phạt-gọi cho bằng chứng vụ án, micro-F1 cho điều luật, và bên thắng nhị phân cho nhãn kết quả---và tổng thể được làm bền vững cho lần chạy hàng loạt nhiều giờ nhờ cô lập theo vụ án và ghi tăng dần nguyên tử. Riêng prompt cây quyết định đã nâng độ chính xác bên thắng nhị phân từ 0,70 lên 0,88 trên tập công khai có nhãn.
+
+\subsection{Hạn chế}
+Hệ thống còn một số hạn chế cần được nhìn nhận thẳng thắn. Thứ nhất, thời gian
+chạy dài: do API bản án bị giới hạn một truy vấn mỗi năm giây và mỗi vụ án đòi
+hỏi nhiều lần gọi mô hình ngôn ngữ cho phân rã, đánh giá độ phủ và lấy mẫu tự
+nhất quán, một lần chạy đầy đủ kéo dài nhiều giờ; điều này làm chậm vòng lặp thử
+nghiệm và giới hạn số cấu hình có thể khảo sát trong khung thời gian cuộc thi.
+Thứ hai, pipeline phụ thuộc nhiều vào các mô hình tiền huấn luyện có sẵn---mô
+hình dense embedding, bộ trích từ khóa, cross-encoder reranker và mô hình ngôn
+ngữ pháp luật---mà chất lượng và thiên lệch của chúng trên miền án dân sự tiếng
+Việt được kế thừa trực tiếp chứ chưa được chúng tôi tinh chỉnh hay kiểm soát.
+Thứ ba, và quan trọng nhất, chúng tôi chưa thực hiện được một nghiên cứu bóc tách
+(ablation study) có hệ thống để định lượng đóng góp riêng của từng thành phần:
+ngoài phần đánh giá tách biệt cho prompt dự đoán kết quả, ảnh hưởng thực sự của
+kênh truy hồi lai, bước rerank, guard chống ảo giác và chiến lược ngân sách gọi
+API tới điểm cuối vẫn chưa được kiểm chứng độc lập. Việc bổ sung ablation đầy đủ,
+thay thế thử các thành phần tiền huấn luyện, và rút ngắn thời gian chạy là các
+hướng cải tiến chính cho công việc tương lai.
 
 \begin{thebibliography}{00}
-\bibitem{b1} G. Eason, B. Noble, and I. N. Sneddon, ``On certain integrals of Lipschitz-Hankel type involving products of Bessel functions,'' Phil. Trans. Roy. Soc. London, vol. A247, pp. 529--551, April 1955.
-\bibitem{b2} J. Clerk Maxwell, A Treatise on Electricity and Magnetism, 3rd ed., vol. 2. Oxford: Clarendon, 1892, pp.68--73.
-\bibitem{b3} I. S. Jacobs and C. P. Bean, ``Fine particles, thin films and exchange anisotropy,'' in Magnetism, vol. III, G. T. Rado and H. Suhl, Eds. New York: Academic, 1963, pp. 271--350.
-\bibitem{b4} K. Elissa, ``Title of paper if known,'' unpublished.
-\bibitem{b5} R. Nicole, ``Title of paper with only first word capitalized,'' J. Name Stand. Abbrev., in press.
-\bibitem{b6} Y. Yorozu, M. Hirano, K. Oka, and Y. Tagawa, ``Electron spectroscopy studies on magneto-optical media and plastic substrate interface,'' IEEE Transl. J. Magn. Japan, vol. 2, pp. 740--741, August 1987 [Digests 9th Annual Conf. Magnetics Japan, p. 301, 1982].
-\bibitem{b7} M. Young, The Technical Writer's Handbook. Mill Valley, CA: University Science, 1989.
+  \bibitem{b1} Q. Zhang, S. Chen, Y. Bei, \textit{et al.}, ``A survey of graph retrieval-augmented generation for customized large language models,'' \textit{arXiv preprint} arXiv:2501.13958, 2025.
+  \bibitem{b2} Z. Chen, Q. Zhang, Z. Xiang, \textit{et al.}, ``LegalGraphRAG: Multi-agent graph retrieval-augmented generation for reliable legal reasoning,'' \textit{arXiv preprint} arXiv:2605.28120, 2026.
+  \bibitem{b3} M. Akarsu, R. K. Karaman, and C. Mierbach, ``From BM25 to corrective RAG: Benchmarking retrieval strategies for text-and-table documents,'' \textit{arXiv preprint} arXiv:2604.01733, 2026.
+  \bibitem{b4} K. Phan, X.-B. Le, and T. Quan, ``SBV-LawGraph: A hybrid RAG approach integrating knowledge graph for the State Bank of Vietnam legal documents,'' in \textit{Proc. 18th Asian Conf. Intelligent Information and Database Systems (ACIIDS)}, 2026.
 \end{thebibliography}
-\vspace{12pt}
-\color{red}
-IEEE conference templates contain guidance text for composing and formatting conference papers. Please ensure that all template text is removed from your conference paper prior to submission to the conference. Failure to remove the template text from your paper may result in your paper not being published.
 
 \end{document}
