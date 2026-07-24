@@ -11,7 +11,7 @@ import uuid
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple, runtime_checkable
+from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, Tuple, runtime_checkable
 
 import warnings
 
@@ -2159,14 +2159,37 @@ class DeepLegalAgent:
             )
         return entry
 
-    def run_dataset(self, cases: Sequence[LegalCase]) -> List[SubmissionEntry]:
+    def run_dataset(
+        self,
+        cases: Sequence[LegalCase],
+        checkpoint: Optional[Callable[[List[SubmissionEntry]], None]] = None,
+    ) -> List[SubmissionEntry]:
         entries: List[SubmissionEntry] = []
         progress = _progress(total=len(cases), desc="inference", unit="case")
-        for case in cases:
-            progress.set_description_str(f"[inference] {case.case_id:<14}", refresh=False)
-            entries.append(self.run_case(case))
-            progress.update(1)
-        progress.close()
+        try:
+            for case in cases:
+                progress.set_description_str(f"[inference] {case.case_id:<14}", refresh=False)
+                try:
+                    entries.append(self.run_case(case))
+                except Exception as error:
+                    print(
+                        f"⚠️ [case {case.case_id}] FAILED ({error}) -> fallback "
+                        f"'{DEFAULT_PREDICTION}'",
+                        flush=True,
+                    )
+                    entries.append(
+                        SubmissionEntry(
+                            case_id=case.case_id,
+                            case_evidence=[],
+                            law_evidence=[],
+                            prediction=DEFAULT_PREDICTION,
+                        )
+                    )
+                progress.update(1)
+                if checkpoint is not None:
+                    checkpoint(entries)
+        finally:
+            progress.close()
         return entries
 
 
@@ -2281,12 +2304,15 @@ class SubmissionWriter:
     def __init__(self, output_path: Path) -> None:
         self._output_path = output_path
 
-    def write(self, entries: Sequence[SubmissionEntry]) -> None:
+    def write(self, entries: Sequence[SubmissionEntry], quiet: bool = False) -> None:
         payload = [entry.as_dict() for entry in entries]
         self._output_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._output_path.open("w", encoding="utf-8") as handle:
+        tmp = self._output_path.with_suffix(self._output_path.suffix + ".tmp")
+        with tmp.open("w", encoding="utf-8") as handle:
             json.dump(payload, handle, ensure_ascii=False, indent=2)
-        print(f"💾 [write] {len(payload)} entries -> {self._output_path}", flush=True)
+        tmp.replace(self._output_path)
+        if not quiet:
+            print(f"💾 [write] {len(payload)} entries -> {self._output_path}", flush=True)
 
 
 class Application:
@@ -2308,27 +2334,29 @@ class Application:
         agent = DeepLegalAgentFactory.create(self._settings, repository)
         all_cases = CaseDatasetLoader(self._settings.input_path).load()
         processed = all_cases[:limit] if limit is not None else all_cases
-        entries = agent.run_dataset(processed)
-        # The submission must cover every case in the input. When running a sample
-        # (--limit), fill the untouched cases with a safe default so the file stays
-        # valid instead of failing "missing predictions for N cases".
-        done = {entry.case_id for entry in entries}
-        missing = [case for case in all_cases if case.case_id not in done]
-        for case in missing:
-            entries.append(
-                SubmissionEntry(
-                    case_id=case.case_id,
-                    case_evidence=[],
-                    law_evidence=[],
-                    prediction="",
-                )
-            )
-        if missing:
-            print(
-                f"✨ [fill] {len(missing)} case(s) not processed -> empty prediction",
-                flush=True,
-            )
-        SubmissionWriter(self._settings.output_path).write(entries)
+        writer = SubmissionWriter(self._settings.output_path)
+
+        def _covered(entries: List[SubmissionEntry]) -> List[SubmissionEntry]:
+            done = {entry.case_id for entry in entries}
+            filled = list(entries)
+            for case in all_cases:
+                if case.case_id not in done:
+                    filled.append(
+                        SubmissionEntry(
+                            case_id=case.case_id,
+                            case_evidence=[],
+                            law_evidence=[],
+                            prediction="",
+                        )
+                    )
+            return filled
+
+        def _checkpoint(entries: List[SubmissionEntry]) -> None:
+            writer.write(_covered(entries), quiet=True)
+
+        entries = agent.run_dataset(processed, checkpoint=_checkpoint)
+        final = _covered(entries)
+        writer.write(final)
         self._write_debug(agent.debug_rows)
         self._write_trace(agent.trace_entries)
 

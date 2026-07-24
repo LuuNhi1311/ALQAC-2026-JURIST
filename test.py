@@ -7,7 +7,7 @@ API_KEY = "alqac_Subc4BDmE1TQdZD8Sst8lKKeJkUKqqOy"
 
 
 payload = {
-    "query": "hợp đồng chuyển nhượng đất",
+    "query": "Tòa án chấp nhận yêu cầu hủy hợp đồng chuyển nhượng đất của bà Hà Thị T",
     "case_id": "case_1615",
 }
 

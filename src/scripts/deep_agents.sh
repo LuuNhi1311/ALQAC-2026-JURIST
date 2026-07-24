@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-INDEX=1
+INDEX=0
 PREDICTOR_KIND=llm
-LIMIT=1
+LIMIT=
 
 GPU_IDS=5
 
@@ -12,7 +12,7 @@ SPARSE_MODEL=Qdrant/bm25
 RERANK_MODEL=AITeamVN/Vietnamese_Reranker
 USE_RERANKER=true
 LAW_RERANK_TOPK=8
-LAW_RERANK_MIN_SCORE=0.5
+LAW_RERANK_MIN_SCORE=0.0
 
 LLM=VLSP2025-LegalSML/qwen3-4b-legal-pretrain
 VLLM_API_BASE=http://localhost:8001/v1
