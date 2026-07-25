@@ -77,6 +77,7 @@ class OutcomeVoter:
         self._primary_position = primary_position
 
     def vote(self, predictions: Sequence[str]) -> str:
+        """Majority vote over pipeline predictions; ties broken toward the primary pipeline's label."""
         valid = [prediction for prediction in predictions if prediction in PREDICTION_LABELS]
         if not valid:
             return DEFAULT_PREDICTION
@@ -121,6 +122,7 @@ class EnsembleMerger:
         self._voter = voter
 
     def merge(self, submissions: Sequence[Dict[str, PredictedCase]]) -> List[MergedCase]:
+        """Merge submissions per case: vote the verdict, union the case/law evidence across pipelines."""
         case_ids = self._ordered_case_ids(submissions)
         merged: List[MergedCase] = []
         for case_id in case_ids:

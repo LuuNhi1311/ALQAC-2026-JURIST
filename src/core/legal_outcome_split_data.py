@@ -18,6 +18,7 @@ def split_records(
     valid_ratio: float,
     test_ratio: float,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Stratified 70/15/15 split by verdict_label, seeded for reproducibility across runs."""
     return random_split_dataframe(
         dataframe,
         seed=seed,
@@ -37,6 +38,7 @@ def write_json(dataframe: pd.DataFrame, output_path: Path) -> None:
 
 
 def print_distribution(name: str, dataframe: pd.DataFrame) -> None:
+    """Report per-split class counts to verify stratification preserved label balance."""
     counts = dataframe["verdict_label"].value_counts().to_dict()
     print(f"{name} ({len(dataframe)}): {counts}")
 

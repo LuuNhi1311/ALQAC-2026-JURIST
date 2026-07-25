@@ -435,6 +435,7 @@ class Bm25Index:
         }
 
     def search(self, query: str, top_k: int) -> List[Tuple[int, float]]:
+        """Rank documents by BM25 score against the query and return the top-k (doc_index, score)."""
         query_terms = self._tokenize(query)
         scores: List[Tuple[int, float]] = []
         for index, frequencies in enumerate(self._term_frequencies):
@@ -479,6 +480,7 @@ class SubQueryPlanner:
         return self._parse_queries(self._model.generate(self._SYSTEM, user_prompt), fallback=[case.case_query])
 
     def gap_queries(self, case: LegalCase, collected: Sequence[RetrievedChunk]) -> List[str]:
+        """Deep-research step: LLM judges if evidence is sufficient; returns follow-up queries or [] to stop."""
         evidence = "\n".join(f"- {chunk.text[:220]}" for chunk in collected) or "(chưa có bằng chứng)"
         user_prompt = (
             f"Mô tả vụ án:\n{case.case_query}\n\n"
@@ -522,6 +524,7 @@ class CaseEvidenceCollector:
         self._max_calls = max_calls
 
     def collect(self, case: LegalCase) -> List[RetrievedChunk]:
+        """Seed queries, then loop planner gap-queries under the penalty-aware budget until nothing new is found."""
         if not self._source.enabled:
             return []
         collected: Dict[str, RetrievedChunk] = {}
@@ -536,6 +539,7 @@ class CaseEvidenceCollector:
         return list(collected.values())
 
     def _within_budget(self, issued: Set[str], collected: Dict[str, RetrievedChunk]) -> bool:
+        """Allow at most ~2 API calls per segment found (matches the scorer's efficiency penalty)."""
         if len(issued) >= self._max_calls:
             return False
         return len(issued) < 2 * max(len(collected), PENALTY_SAFE_MIN_SEGMENTS)
@@ -744,12 +748,14 @@ class CitationLawExtractor(LawEvidenceRetriever):
         self._fallback = fallback
 
     def retrieve(self, case: LegalCase, evidence: Sequence[RetrievedChunk]) -> List[LawReference]:
+        """Prefer explicit citations; fall back to semantic retrieval only when none are found."""
         references = self._from_citations(evidence)
         if not references and self._fallback is not None:
             return self._fallback.retrieve(case, evidence)
         return references[: self._max_results]
 
     def _from_citations(self, evidence: Sequence[RetrievedChunk]) -> List[LawReference]:
+        """Parse explicit "Điều N ... Bộ luật X" citations from judgment text into (law_id, aid) keys."""
         text = "\n".join(chunk.text for chunk in evidence)
         references: List[LawReference] = []
         seen: Set[Tuple[str, int]] = set()
@@ -797,6 +803,7 @@ class LlmOutcomePredictor(OutcomePredictor):
         evidence: Sequence[RetrievedChunk],
         laws: Sequence[LawReference],
     ) -> str:
+        """Predict the verdict by majority vote over `samples` LLM draws (self-consistency)."""
         user_prompt = self._build_prompt(case, evidence, laws)
         votes: List[str] = []
         for _ in range(self._samples):
@@ -972,6 +979,7 @@ class ArtifactCache:
         self._write_cache = write_cache
 
     def load_or_build(self, key: str, builder: Callable[[], CacheableT]) -> CacheableT:
+        """Return the cached artifact for `key`, else build it once and persist it (corpus-fingerprinted)."""
         path = self._path(key)
         if self._read_cache:
             cached = self._load(path)

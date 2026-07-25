@@ -349,6 +349,7 @@ def add_section(
 
 
 def build_teacher_text(row: pd.Series, separator: str) -> str:
+    """Assemble the teacher's input as labelled [SECTION] blocks from every case field (vs. the query-only student)."""
     court_and_level = concat_string(
         separator, row["court"], row["court_level"]
     )
@@ -432,6 +433,7 @@ def random_split_dataframe(
     valid_ratio: float,
     test_ratio: float,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Random train/valid/test split, stratified by verdict_label when classes are populous enough."""
     label_counts = dataframe["verdict_label"].value_counts()
 
     can_stratify = len(label_counts) > 1 and label_counts.min() >= 3
@@ -474,6 +476,7 @@ def time_split_dataframe(
     train_ratio: float,
     valid_ratio: float,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Chronological split: sort by judgment_date so validation/test are always newer than train."""
     if "judgment_date" not in dataframe.columns:
         raise ValueError("Time split yêu cầu cột judgment_date.")
 
@@ -611,6 +614,7 @@ def calculate_class_weights(
     label2id: Dict[str, int],
     device: torch.device,
 ) -> torch.Tensor:
+    """Inverse-frequency class weights so rare verdicts aren't swamped by majority classes."""
     label_ids = [
         label2id[label]
         for label in train_dataframe["verdict_label"].astype(str)
@@ -796,6 +800,7 @@ def representation_alignment_loss(
     teacher_hidden: torch.Tensor,
     projector: RepresentationProjector,
 ) -> torch.Tensor:
+    """Cosine-distance loss pulling the student's [CLS] embedding toward the teacher's (via a size-matching projector)."""
     projected_student = projector(student_hidden)
     projected_student = F.normalize(projected_student, dim=-1)
     teacher_normalized = F.normalize(teacher_hidden, dim=-1)
@@ -1126,6 +1131,8 @@ def train_student(
     output_directory: Path,
     config: TrainingConfig,
 ) -> Path:
+    # Distill the query-only student from the frozen full-context teacher.
+    # Loss = hard CE(label) + alpha*KL(soft teacher logits) + beta*representation alignment.
     student_output = output_directory / "student_query_only"
 
     for parameter in teacher.parameters():

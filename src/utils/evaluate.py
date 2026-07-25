@@ -209,6 +209,7 @@ class GoldStore:
         return gold
 
     def _parse_provisions(self, block: str) -> Tuple[Set[LawKey], int]:
+        """Parse gold "law_name | Điều N" lines into (law_id, aid) keys; count provisions outside the corpus as unresolved (unscored)."""
         keys: Set[LawKey] = set()
         unresolved = 0
         for line in block.splitlines():
@@ -303,6 +304,7 @@ class Evaluator:
 
     @staticmethod
     def _accumulate_law(report: LawReport, gold_case: GoldCase, predicted: PredictedCase) -> None:
+        """Tally TP/FP/FN of predicted vs. gold law keys (feeds micro-F1) and add this case's macro-F1."""
         gold_keys = gold_case.law_keys
         predicted_keys = predicted.law_keys
         true_positive = len(gold_keys & predicted_keys)
@@ -380,6 +382,7 @@ class ReportPrinter:
 
 
 def api_efficiency_factor(num_calls: int, num_segments: int) -> float:
+    """Case-recall penalty: full credit up to 2x calls-per-segment, linearly decaying to 0 at 5x."""
     if num_segments <= 0:
         return 0.0
     full_credit_calls = 2 * num_segments

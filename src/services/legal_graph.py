@@ -110,6 +110,7 @@ class LawNameResolver:
 
 class CitationGraphBuilder:
     def build(self, articles: Sequence[da.LawArticle]) -> Dict[str, List[str]]:
+        """Build an undirected citation adjacency map by linking each article to the articles it references."""
         by_number: Dict[Tuple[str, int], da.LawArticle] = {}
         for article in articles:
             by_number[(article.law_id, article.order + 1)] = article
@@ -194,6 +195,7 @@ class LegalGraphIndexBuilder:
         self._knn_top_k = knn_top_k
 
     def build(self) -> LegalGraphIndex:
+        """Build the graph store: law articles as embedded nodes, citation + KNN edges, then PageRank/community annotations."""
         articles = self._loader.load()
         print(f"🧩 [graph] loaded {len(articles)} law articles", flush=True)
         neighbors = self._citation_builder.build(articles)
@@ -268,6 +270,7 @@ class AgenticGraphRetriever:
         case: da.LegalCase,
         decomposition: da.CaseQueryDecomposition,
     ) -> List[GraphLawReference]:
+        """Seed by vector search, expand along graph neighbors, then let the LLM assessor request more rounds until sufficient."""
         collected: Dict[str, GraphLawReference] = {}
         queries = list(dict.fromkeys(decomposition.sub_queries + decomposition.keywords))
         for iteration in range(self._max_iterations):
@@ -303,6 +306,7 @@ class AgenticGraphRetriever:
                     collected[record["id"]] = self._to_reference(record, score)
 
     def _expand(self, collected: Dict[str, GraphLawReference]) -> None:
+        """Pull in graph neighbors of the current top nodes, up to `neighbor_hops` hops out."""
         for _ in range(self._neighbor_hops):
             top = self._rank(collected)[: self._expand_top]
             frontier: List[str] = []

@@ -71,6 +71,7 @@ def load_student_tokenizer(config: PredictConfig) -> Any:
 
 
 def build_id2label(model: Any) -> Dict[int, str]:
+    """Read the model's stored id->label map, coercing string keys back to int class ids."""
     return {int(key): value for key, value in model.config.id2label.items()}
 
 
@@ -81,8 +82,10 @@ def predict_case_query(
     tokenizer: Any,
     config: PredictConfig,
 ) -> Dict[str, Any]:
+    """Predict a verdict for one case_query: normalize -> tokenize -> softmax -> argmax label."""
     normalized_query = normalize_text(query)
 
+    # Guard against empty/whitespace input, which would otherwise yield a meaningless prediction.
     if not normalized_query:
         raise ValueError("case_query không được để trống.")
 
@@ -120,6 +123,7 @@ def predict_dataframe(
     tokenizer: Any,
     config: PredictConfig,
 ) -> List[Dict[str, Any]]:
+    """Batch inference over student_text: softmax per batch, argmax to labels, keep full per-label probs."""
     model.eval()
 
     id2label = build_id2label(model)
@@ -203,6 +207,7 @@ def evaluate_predictions(
     config: PredictConfig,
     output_directory: Path,
 ) -> None:
+    """Score predictions against gold labels; invert id2label so the dataset can encode labels back to ids."""
     id2label = build_id2label(model)
     label2id = {value: key for key, value in id2label.items()}
 

@@ -1316,6 +1316,7 @@ class LawRetrievalAgent:
     def retrieve(
         self, case: LegalCase, decomposition: CaseQueryDecomposition
     ) -> List[LawReference]:
+        """Iterative retrieval: hybrid-search, then let the LLM assessor request follow-up queries until sufficient."""
         collected: Dict[Tuple[str, int], LawReference] = {}
         queries = list(dict.fromkeys(decomposition.sub_queries + decomposition.keywords))
         for iteration in range(self._max_iterations):
@@ -1546,6 +1547,7 @@ class CaseEvidenceCollector:
         decomposition: CaseQueryDecomposition,
         references: Sequence[LawReference],
     ) -> List[RetrievedChunk]:
+        """Fetch case segments under a penalty-aware call budget, stopping on a dry streak."""
         ordered = self._build_queries(case, decomposition, references)
         collected: Dict[str, RetrievedChunk] = {}
         calls = 0
@@ -1554,6 +1556,7 @@ class CaseEvidenceCollector:
         for query in ordered:
             if calls >= self._max_calls:
                 break
+            # Penalty-aware cap: never spend more than 2 calls per segment found so far.
             if calls >= 2 * max(len(collected), PENALTY_SAFE_MIN_SEGMENTS):
                 break
             calls += 1
@@ -1582,6 +1585,7 @@ class CaseEvidenceCollector:
         decomposition: CaseQueryDecomposition,
         references: Sequence[LawReference],
     ) -> List[str]:
+        """Build the ordered probe list: sliding-window queries if full text exists, else interleave LLM keywords with fixed probes."""
         spread = self._spread_queries(case.full_text)
         if spread:
             candidates = spread + list(decomposition.sub_queries) + list(self._probe_queries)
@@ -1607,6 +1611,7 @@ class CaseEvidenceCollector:
 
     @staticmethod
     def _spread_queries(text: str) -> List[str]:
+        """Slice the judgment into evenly-spaced word windows so probes span the whole document."""
         words = text.split()
         if not words:
             return []
@@ -1669,6 +1674,7 @@ class LlmOutcomePredictor:
         references: Sequence[LawReference],
         evidence: Sequence[RetrievedChunk],
     ) -> OutcomeReasoning:
+        """Predict the verdict by self-consistency: majority vote over `samples` LLM draws."""
         user_prompt = self._build_prompt(case, references, evidence)
         if TRACE.enabled:
             TRACE.classification_prompt = user_prompt
@@ -1917,6 +1923,7 @@ class CitationLawExtractor:
         self._resolver = resolver
 
     def extract(self, evidence: Sequence[RetrievedChunk]) -> List[LawReference]:
+        """Extract explicit citations ("Điều N ... Bộ luật X") from judgment text into (law_id, aid) keys — high-precision law evidence."""
         text = "\n".join(chunk.text for chunk in evidence if chunk.text)
         if not text:
             return []
@@ -1980,6 +1987,7 @@ class LawEvidenceSelector:
         references: Sequence[LawReference],
         evidence: Sequence[RetrievedChunk],
     ) -> List[LawReference]:
+        """Ask the LLM to keep only the statutes the court actually applied (precision over recall)."""
         candidates = list(references)
         if len(candidates) <= 1:
             return candidates
@@ -2062,7 +2070,7 @@ class SubmissionBuilder:
         references: Sequence[LawReference],
         evidence: Sequence[RetrievedChunk],
     ) -> List[LawReference]:
- 
+        """Final law evidence = explicit citations first, then LLM-selected/reranked retrieval, deduped."""
         cited: List[LawReference] = []
         if self._citation_extractor is not None:
             cited = self._citation_extractor.extract(evidence)
@@ -2112,6 +2120,7 @@ class DeepLegalAgent:
         self.trace_entries: List[Dict[str, Any]] = []
 
     def run_case(self, case: LegalCase) -> SubmissionEntry:
+        """One case end-to-end: decompose -> retrieve law -> collect evidence -> predict -> build submission."""
         if TRACE.enabled:
             TRACE.reset()
         decomposition = self._decomposer.decompose(case)
@@ -2348,6 +2357,7 @@ def _resolve_resume(
     base: Path,
     case_ids: Sequence[str],
 ) -> Tuple[Path, Dict[str, SubmissionEntry], Set[str]]:
+    """Crash-safe resume: reuse partial output and skip done cases; if already complete, write to a fresh -N file."""
     existing = _load_existing_entries(base)
     done = {str(record.get("case_id")) for record in existing if record.get("prediction")}
     if existing and done.issuperset(case_ids):

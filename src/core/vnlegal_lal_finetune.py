@@ -207,6 +207,7 @@ def tokenize(text: str) -> List[str]:
 
 
 def attach_lora(model: SentenceTransformer) -> None:
+    """Wrap the base transformer with a LoRA adapter so only low-rank weights train."""
     lora_config = LoraConfig(
         task_type=TaskType.FEATURE_EXTRACTION,
         r=16,
@@ -229,6 +230,7 @@ def encode_corpus(model: SentenceTransformer, corpus_texts: List[str]) -> torch.
 
 
 def mine_triplets(model: SentenceTransformer, data: DataBundle, bm25: BM25Okapi, document_embeddings: torch.Tensor) -> Dataset:
+    """Mine hard negatives per query from the dense + BM25 candidate pools, filtering out likely false negatives (score within a margin of the positive)."""
     query_texts = [query for query, _cids in data.train_examples]
     query_embeddings = model.encode(
         query_texts,
@@ -301,6 +303,7 @@ def train_round(
 
 
 def run_ance(model: SentenceTransformer, data: DataBundle, bm25: BM25Okapi, evaluator: InformationRetrievalEvaluator) -> None:
+    """ANCE loop: each round re-encodes the corpus with the current model, re-mines harder negatives, and retrains."""
     loss = CachedMultipleNegativesRankingLoss(model, mini_batch_size=4)
     for round_index in range(1, ANCE_ROUNDS + 1):
         print(f"ANCE round {round_index}/{ANCE_ROUNDS}: encoding corpus and mining hard negatives")
@@ -313,6 +316,7 @@ def run_ance(model: SentenceTransformer, data: DataBundle, bm25: BM25Okapi, eval
 
 
 def merge_and_save(model: SentenceTransformer) -> None:
+    """Fold the trained LoRA adapter into the base weights so the published model needs no PEFT at inference."""
     model[0].model = model[0].model.merge_and_unload()
     model.save_pretrained(MERGED_DIR)
 

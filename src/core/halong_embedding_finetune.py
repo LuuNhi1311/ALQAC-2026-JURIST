@@ -61,6 +61,7 @@ class DataBundle:
 
 
 def resolve_law_id(name: str, corpus_law_ids: Set[str]) -> Optional[str]:
+    """Map a free-text law name to its canonical corpus law_id, dropping outdated versions."""
     for match in _CODE_RE.finditer(name):
         if match.group(0) in corpus_law_ids:
             return match.group(0)
@@ -101,6 +102,7 @@ def cited_cids(
     number_to_aid: Dict[Tuple[str, int], int],
     corpus_law_ids: Set[str],
 ) -> Set[str]:
+    """Parse a case's cited "law name | Điều N" lines into positive corpus article ids (relevance labels)."""
     cids: Set[str] = set()
     for line in str(related_text or "").splitlines():
         if "|" not in line:
@@ -140,6 +142,7 @@ def load_corpus(corpus_path: str) -> Tuple[Dict[str, str], Dict[Tuple[str, int],
 
 
 def prepare_data() -> DataBundle:
+    """Build training pairs: supervised (case_query -> cited article) + self-supervised ICT, with a held-out eval set."""
     random.seed(42)
     corpus, number_to_aid = load_corpus(CORPUS_PATH)
     corpus_law_ids = {cid.split("::")[0] for cid in corpus}

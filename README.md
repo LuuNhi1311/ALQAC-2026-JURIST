@@ -10,9 +10,9 @@
 **ALQAC 2026** legal judgment prediction task. Given a Vietnamese civil-case query,
 the system must jointly produce three outputs:
 
-1. **Outcome label** — a four-class verdict (`A_WIN`, `PARTIAL_A_WIN`, `PARTIAL_B_WIN`, `B_WIN`, where A is the plaintiff and B is the defendant), scored on a **binary winning-side** basis.
-2. **Case evidence** — identifiers of relevant judgment segments, retrieved through a **rate-limited API** (one request every 5 seconds) and scored by **penalty-aware recall**.
-3. **Law evidence** — the statutes the court applied, scored by **micro-F1**.
+1. **Outcome label** - a four-class verdict (`A_WIN`, `PARTIAL_A_WIN`, `PARTIAL_B_WIN`, `B_WIN`, where A is the plaintiff and B is the defendant), scored on a **binary winning-side** basis.
+2. **Case evidence** - identifiers of relevant judgment segments, retrieved through a **rate-limited API** (one request every 5 seconds) and scored by **penalty-aware recall**.
+3. **Law evidence** - the statutes the court applied, scored by **micro-F1**.
 
 The whole pipeline is built exclusively from **open-weight models under 10B parameters**
 (no proprietary APIs), as required by the competition. The generation model is
@@ -32,17 +32,17 @@ ensembled directly.
 | **LegalGraph** | `legal_graph.py` | In-memory citation graph (`LegalGraphRAG`) + KNN + PageRank | pickle (`.cache/legal_graph_db.pkl`) |
 | **DeepSearcher** | `deep_searcher.py` | Citation extraction + `DeepSearcher` vector retrieval | Milvus Lite (`.cache/deepsearcher_milvus.db`) |
 
-- **`jurist.py`** — the reference pipeline: LLM query decomposition with a numeric
+- **`jurist.py`** - the reference pipeline: LLM query decomposition with a numeric
   anti-hallucination guard, iterative hybrid statute retrieval (`hiieu/halong_embedding` +
   BM25 over Qdrant) with an LLM coverage assessor, penalty-aware case-evidence collection,
   `AITeamVN/Vietnamese_Reranker` cross-encoder reranking, and self-consistency outcome
   prediction.
-- **`legal_graph.py`** — reuses the in-memory graph database of
+- **`legal_graph.py`** - reuses the in-memory graph database of
   [`LegalGraphRAG`](src/core/LegalGraphRAG) (`GraphDBManager` / `InMemoryGraphDB`): law
   articles become graph nodes with Halong embeddings, citation edges, `run_knn` similarity
   edges, PageRank and community annotations; retrieval seeds by vector search then expands
   along the graph.
-- **`deep_searcher.py`** — extracts explicit statute citations from the retrieved judgment
+- **`deep_searcher.py`** - extracts explicit statute citations from the retrieved judgment
   text, and falls back to the [`DeepSearcher`](src/core/deep-searcher) library (Halong
   embedding + Milvus Lite vector store) for semantic statute retrieval.
 
@@ -51,17 +51,31 @@ ensembled directly.
 
 The competition data lives under `data/` in two splits:
 
-- **Public test** (`ALQAC2026_public_test.json`) — 50 labeled first-instance civil cases with
+- **Public test** (`ALQAC2026_public_test.json`) - 50 labeled first-instance civil cases with
   rich fields (facts, query, gold verdict, court verdict text, reasoning, cited statutes).
   Its law corpus (`corpus_law_pub.json`) holds 18 documents / 3,352 articles.
-- **Private test** (`ALQAC_private_test.json`) — 60 unlabeled cases (case id + query); the
+- **Private test** (`ALQAC_private_test.json`) - 60 unlabeled cases (case id + query); the
   real evaluation target. Its law corpus (`private_test_60_cases_extracted_corpus.json`) holds
   14 documents / 2,820 articles. **The launch scripts default to this private split.**
 
-Case-evidence segments are **not** shipped in these files — they are retrieved live through
+Case-evidence segments are **not** shipped in these files - they are retrieved live through
 the rate-limited Case API.
 
 ### Architecture
+
+JURIST is an **agentic RAG** system that runs in two phases - an offline **indexing** phase
+that builds the retrieval store once per corpus, and an online **inference** phase that runs
+a per-case reasoning loop to produce the submission.
+
+1. **Indexing** - load the law corpus, recursively chunk each article, embed it
+   with the fine-tuned dense model (plus BM25 for the main pipeline), and write it to the
+   pipeline's store (Qdrant / in-memory graph / Milvus Lite).
+2. **Inference** - for each case: **decompose** the query into legal
+   sub-queries (with a numeric anti-hallucination guard) → **retrieve law** iteratively until
+   the LLM assessor judges coverage sufficient → **collect case evidence** from the
+   rate-limited API under a penalty-aware call budget → **predict the outcome** (distilled
+   classifier or self-consistency LLM voting) → **assemble** the three-part submission.
+
 <img src="docs/indexing.png" alt="Indexing" width="100%">
 
 <img src="docs/inference.png" alt="Inference" width="100%">
@@ -74,7 +88,7 @@ the rate-limited Case API.
 
 ### 1. Python environments
 
-Two conda environments are used (the CUDA build must match the host driver — on a
+Two conda environments are used (the CUDA build must match the host driver - on a
 driver-535 / CUDA-12.2 host, use cu12x wheels):
 
 ```bash
@@ -121,15 +135,15 @@ bash src/scripts/qwen_3_4b_legal.sh    # starts vLLM as `vietnamese-law` on port
 ### 2. Index the law corpus, then run inference
 
 ```bash
-# JURIST (main) — Qdrant hybrid retrieval
+# JURIST (main) - Qdrant hybrid retrieval
 bash src/scripts/jurist.sh index
 bash src/scripts/jurist.sh search
 
-# LegalGraph — in-memory citation graph
+# LegalGraph - in-memory citation graph
 bash src/scripts/legal_graph.sh index
 bash src/scripts/legal_graph.sh search
 
-# DeepSearcher — Milvus Lite vector retrieval
+# DeepSearcher - Milvus Lite vector retrieval
 bash src/scripts/deep_searcher.sh index
 bash src/scripts/deep_searcher.sh search
 ```
@@ -169,13 +183,13 @@ Both scripts read the corpus/test split from `ALQAC_CORPUS` / `ALQAC_TEST`, writ
 ```bash
 conda activate nina
 
-# Halong embedding -> leonpham1208/alqac_halong_embedding
+# Halong embedding finetune
 #   ICT + Matryoshka (768/512/256/128/64), 100 epochs, batch 16
 ALQAC_CORPUS=data/private_test_60_cases_extracted_corpus.json \
 ALQAC_OUTPUT_DIR=./alqac_halong_embedding \
 python src/core/halong_embedding_finetune.py
 
-# vnlegal-lal embedding -> leonpham1208/alqac_vnlegal_lal
+# vnlegal-lal embedding finetune
 #   ANCE hard-negative mining (3 rounds), 2048 seq-len, LoRA merged to ALQAC_MERGED_DIR
 ALQAC_CORPUS=data/private_test_60_cases_extracted_corpus.json \
 ALQAC_OUTPUT_DIR=./alqac_vnlegal_lal \
@@ -183,14 +197,14 @@ ALQAC_MERGED_DIR=./alqac_vnlegal_lal_merged \
 python src/core/vnlegal_lal_finetune.py
 ```
 
-The resulting dense model is what `--dense-model hiieu/halong_embedding` (or the
-`leonpham1208/alqac_halong_embedding` finetune) points at in the pipelines.
+The resulting dense model is what `--dense-model hiieu/halong_embedding` (or your own
+fine-tuned checkpoint) points at in the pipelines.
 
 ### Outcome classification (4-class verdict)
 
 The verdict classifier predicts one of `A_WIN`, `PARTIAL_A_WIN`, `PARTIAL_B_WIN`, `B_WIN`
 from the case query, via teacher→student knowledge distillation
-(`Qualcomm-AI-Research/BamiBERT` → `leonpham1208/alqac_legal_outcome_cls`). It powers the
+(distilled in-house from `Qualcomm-AI-Research/BamiBERT`). It powers the
 `ClassifierOutcomePredictor` used by `jurist.py` and `legal_graph.py`.
 
 ```bash
